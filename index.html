@@ -228,6 +228,7 @@ td.num{position:relative}
 .ai-status{color:#888;font-size:.88rem}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
 </head>
 <body>
 
@@ -307,6 +308,10 @@ td.num{position:relative}
         <button class="local-cmd-btn" onclick="runLocalCmd('trimspaces')">
           <span>移除多餘空格 <span style="color:#555;font-size:.7rem">「你  好」→「你 好」</span></span>
           <span class="cmd-shortcut">程式處理</span>
+        </button>
+        <button class="local-cmd-btn" onclick="runLocalCmd('s2tw')" id="s2twBtn">
+          <span>簡體字轉繁體字（台灣用語） <span style="color:#555;font-size:.7rem">软件→軟體、视频→影片</span></span>
+          <span class="cmd-shortcut">OpenCC</span>
         </button>
       </div>
       <div class="modal-btns" style="margin-top:16px">
@@ -897,17 +902,27 @@ function switchCmdTab(tab) {
   if (tab === 'ai') setTimeout(() => document.getElementById('commandText').focus(), 100);
 }
 
+let s2twConverter = null;
+function getS2TWConverter() {
+  if (s2twConverter) return s2twConverter;
+  if (typeof OpenCC === 'undefined') return null;
+  s2twConverter = OpenCC.Converter({ from: 'cn', to: 'twp' });
+  return s2twConverter;
+}
+
 const LOCAL_TRANSFORMS = {
   capitalize: text => text.replace(/\b[a-z]/g, c => c.toUpperCase()),
   uppercase:  text => text.replace(/[a-z]/g, c => c.toUpperCase()),
   lowercase:  text => text.replace(/[A-Z]/g, c => c.toLowerCase()),
   trimspaces: text => text.replace(/\s+/g, ' ').trim(),
+  s2tw:       text => { const c = getS2TWConverter(); return c ? c(text) : text; },
 };
 const LOCAL_LABELS = {
   capitalize: '英文首字母大寫',
   uppercase:  '全部英文大寫',
   lowercase:  '全部英文小寫',
   trimspaces: '移除多餘空格',
+  s2tw:       '簡體轉繁體（台灣用語）',
 };
 
 function runLocalCmd(type) {
