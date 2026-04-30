@@ -207,6 +207,17 @@ td.num{position:relative}
 .cmd-examples{display:flex;flex-direction:column;gap:4px;margin-bottom:4px}
 .cmd-example{font-size:.72rem;color:#555;cursor:pointer;padding:4px 8px;border-radius:5px;border:1px solid #2a2a2a;background:#161616;transition:all .15s;text-align:left;font-family:inherit}
 .cmd-example:hover{border-color:#8b7cf8;color:#a99cf8}
+.cmd-tabs{display:flex;gap:0;border-bottom:1px solid #2a2a2a;margin-bottom:14px}
+.cmd-tab{padding:6px 16px;font-size:.75rem;font-family:inherit;background:none;border:none;border-bottom:2px solid transparent;color:#555;cursor:pointer;transition:all .15s;margin-bottom:-1px}
+.cmd-tab:hover{color:#aaa}
+.cmd-tab.active{color:#ddd;border-bottom-color:#8b7cf8}
+.cmd-tab-panel{display:none}
+.cmd-tab-panel.active{display:block}
+.local-cmd-btn{width:100%;text-align:left;padding:8px 12px;background:#161616;border:1px solid #2a2a2a;border-radius:6px;color:#aaa;cursor:pointer;font-size:.78rem;font-family:inherit;transition:all .15s;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.local-cmd-btn:hover:not(:disabled){border-color:#3dd6c8;color:#3dd6c8;background:#0d1f1e}
+.local-cmd-btn:disabled{opacity:.35;cursor:not-allowed}
+.local-cmd-btn .cmd-shortcut{font-size:.68rem;color:#444;white-space:nowrap}
+.local-cmd-btn:hover:not(:disabled) .cmd-shortcut{color:#3dd6c8}
 .cmd-history-item{color:#666;border-color:#222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .cmd-history-item:hover{border-color:#8b7cf8;color:#a99cf8}
 
@@ -216,6 +227,7 @@ td.num{position:relative}
 @keyframes spin{to{transform:rotate(360deg)}}
 .ai-status{color:#888;font-size:.88rem}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 
@@ -243,12 +255,12 @@ td.num{position:relative}
   <div class="modal modal-lg">
     <div class="modal-title">📄 訪綱 / 編輯指引</div>
     <div class="modal-note">
-      從 Google Doc 複製貼上，或上傳 .txt / .md 檔。<br>
+      從 Google Doc 複製貼上，或上傳 .txt / .md / .pdf 檔。<br>
       Claude 會參考此內容校對字幕中的人名、地名、專有名詞。
     </div>
     <div style="display:flex;align-items:center;gap:8px">
       <button class="modal-file-btn" onclick="document.getElementById('guidanceFile').click()">📁 上傳檔案</button>
-      <input type="file" id="guidanceFile" accept=".txt,.md" style="display:none">
+      <input type="file" id="guidanceFile" accept=".txt,.md,.pdf" style="display:none">
       <span class="modal-char-count" id="guidanceCharCount"></span>
     </div>
     <textarea id="guidanceTextArea" placeholder="在此貼上訪綱或編輯指引內容...
@@ -269,26 +281,63 @@ td.num{position:relative}
 <div class="modal-overlay" id="commandModal">
   <div class="modal modal-lg modal-cmd">
     <div class="modal-title">📝 批次指令編輯</div>
-    <div class="modal-note">輸入一段指令，Claude 會自動套用到所有字幕條目並產生修改建議。</div>
-    <div class="modal-label" style="margin-bottom:6px">常用指令（點擊套用）</div>
-    <div class="cmd-examples">
-      <button class="cmd-example" onclick="setCmd(this)">人物的代名詞統一用『他』，物品用『它』</button>
-      <button class="cmd-example" onclick="setCmd(this)">所有數字改用中文（例如 3 → 三、100 → 一百）</button>
-      <button class="cmd-example" onclick="setCmd(this)">移除所有語助詞和重複贅字（例如「就是說」、「然後然後」）</button>
+
+    <!-- Tabs -->
+    <div class="cmd-tabs">
+      <button class="cmd-tab active" id="tabLocal" onclick="switchCmdTab('local')">⚡ 程式處理</button>
+      <button class="cmd-tab" id="tabAI" onclick="switchCmdTab('ai')">✨ AI 指令</button>
     </div>
-    <div id="cmdHistorySection" style="display:none">
-      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;margin-bottom:6px">
-        <span class="modal-label" style="margin:0">歷史指令</span>
-        <button onclick="clearCmdHistory()" style="background:none;border:none;color:#555;cursor:pointer;font-size:.68rem;padding:0;font-family:inherit">清除</button>
+
+    <!-- Tab: 程式處理 -->
+    <div class="cmd-tab-panel active" id="panelLocal">
+      <div class="modal-note" style="margin-bottom:12px">直接點擊即可執行，100% 不遺漏、即時、不消耗 token。</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="local-cmd-btn" onclick="runLocalCmd('capitalize')">
+          <span>英文單字首字母大寫 <span style="color:#555;font-size:.7rem">hello world → Hello World</span></span>
+          <span class="cmd-shortcut">程式處理</span>
+        </button>
+        <button class="local-cmd-btn" onclick="runLocalCmd('uppercase')">
+          <span>全部英文轉大寫 <span style="color:#555;font-size:.7rem">hello → HELLO</span></span>
+          <span class="cmd-shortcut">程式處理</span>
+        </button>
+        <button class="local-cmd-btn" onclick="runLocalCmd('lowercase')">
+          <span>全部英文轉小寫 <span style="color:#555;font-size:.7rem">HELLO → hello</span></span>
+          <span class="cmd-shortcut">程式處理</span>
+        </button>
+        <button class="local-cmd-btn" onclick="runLocalCmd('trimspaces')">
+          <span>移除多餘空格 <span style="color:#555;font-size:.7rem">「你  好」→「你 好」</span></span>
+          <span class="cmd-shortcut">程式處理</span>
+        </button>
       </div>
-      <div id="cmdHistoryList" class="cmd-examples" style="flex-wrap:wrap"></div>
+      <div class="modal-btns" style="margin-top:16px">
+        <button class="btn-cancel" onclick="closeModal('commandModal')">關閉</button>
+      </div>
     </div>
-    <div class="modal-label" style="margin-top:10px">自訂指令</div>
-    <textarea id="commandText" placeholder="例如：把所有『他媽的』換成『天哪』&#10;例如：人名『小明』全部改成『小名』&#10;例如：所有英文單字首字母改大寫"></textarea>
-    <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeModal('commandModal')">取消</button>
-      <button class="btn-primary" id="runCmdBtn" onclick="runCommand()">✨ 執行指令</button>
+
+    <!-- Tab: AI 指令 -->
+    <div class="cmd-tab-panel" id="panelAI">
+      <div class="modal-note" style="margin-bottom:10px">輸入一段指令，Claude 會自動套用到所有字幕條目並產生修改建議。</div>
+      <div class="modal-label" style="margin-bottom:6px">常用指令（點擊套用）</div>
+      <div class="cmd-examples">
+        <button class="cmd-example" onclick="setCmd(this)">人物的代名詞統一用『他』，物品用『它』</button>
+        <button class="cmd-example" onclick="setCmd(this)">所有數字改用中文（例如 3 → 三、100 → 一百）</button>
+        <button class="cmd-example" onclick="setCmd(this)">移除所有語助詞和重複贅字（例如「就是說」、「然後然後」）</button>
+      </div>
+      <div id="cmdHistorySection" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px;margin-bottom:6px">
+          <span class="modal-label" style="margin:0">歷史指令</span>
+          <button onclick="clearCmdHistory()" style="background:none;border:none;color:#555;cursor:pointer;font-size:.68rem;padding:0;font-family:inherit">清除</button>
+        </div>
+        <div id="cmdHistoryList" class="cmd-examples" style="flex-wrap:wrap"></div>
+      </div>
+      <div class="modal-label" style="margin-top:10px">自訂指令</div>
+      <textarea id="commandText" placeholder="例如：把所有『他媽的』換成『天哪』&#10;例如：人名『小明』全部改成『小名』&#10;例如：把口語化的用詞改得更正式"></textarea>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="closeModal('commandModal')">取消</button>
+        <button class="btn-primary" id="runCmdBtn" onclick="runCommand()">✨ 執行指令</button>
+      </div>
     </div>
+
   </div>
 </div>
 
@@ -546,16 +595,44 @@ function setupFileInputs() {
     if (f) loadSubtitleFile(f);
     e.target.value = '';
   });
-  document.getElementById('guidanceFile').addEventListener('change', e => {
+  document.getElementById('guidanceFile').addEventListener('change', async e => {
     const f = e.target.files[0];
     if (!f) return;
-    const r = new FileReader();
-    r.onload = ev => {
-      document.getElementById('guidanceTextArea').value = ev.target.result;
-      updateGuidanceCharCount();
-    };
-    r.readAsText(f, 'UTF-8');
     e.target.value = '';
+
+    if (f.name.toLowerCase().endsWith('.pdf')) {
+      // PDF 解析
+      const statusEl = document.getElementById('guidanceCharCount');
+      statusEl.textContent = '讀取 PDF 中…';
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const arrayBuffer = await f.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join(' ');
+          fullText += pageText + '\n';
+        }
+        fullText = fullText.trim();
+        document.getElementById('guidanceTextArea').value = fullText;
+        updateGuidanceCharCount();
+        showToast('✅ PDF 已讀取（' + pdf.numPages + ' 頁）');
+      } catch(err) {
+        showToast('⚠️ PDF 讀取失敗：' + err.message);
+        console.error(err);
+      }
+    } else {
+      // TXT / MD 解析
+      const r = new FileReader();
+      r.onload = ev => {
+        document.getElementById('guidanceTextArea').value = ev.target.result;
+        updateGuidanceCharCount();
+      };
+      r.readAsText(f, 'UTF-8');
+    }
   });
   document.getElementById('guidanceTextArea').addEventListener('input', updateGuidanceCharCount);
 }
@@ -799,10 +876,10 @@ function updateAIButton() {
   const aiBtn = document.getElementById('aiBtn');
   const cmdBtn = document.getElementById('cmdBtn');
   aiBtn.disabled = !ready;
-  cmdBtn.disabled = !ready;
+  cmdBtn.disabled = !SUBS.length; // 本地指令不需要 API Key
   const hint = !key ? '請先在 ⚙️ 設定中輸入 API Key' : (!SUBS.length ? '請先匯入字幕' : '');
   aiBtn.title = hint || '以 Claude 自動分析字幕';
-  cmdBtn.title = hint || '輸入批次指令修改字幕';
+  cmdBtn.title = !SUBS.length ? '請先匯入字幕' : '輸入批次指令修改字幕';
 }
 
 // ── Command Modal ───────────────────────────────────────────────────────
@@ -810,6 +887,53 @@ function openCommandModal() {
   renderCmdHistory();
   showModal('commandModal');
   setTimeout(() => document.getElementById('commandText').focus(), 100);
+}
+
+function switchCmdTab(tab) {
+  document.getElementById('tabLocal').classList.toggle('active', tab === 'local');
+  document.getElementById('tabAI').classList.toggle('active', tab === 'ai');
+  document.getElementById('panelLocal').classList.toggle('active', tab === 'local');
+  document.getElementById('panelAI').classList.toggle('active', tab === 'ai');
+  if (tab === 'ai') setTimeout(() => document.getElementById('commandText').focus(), 100);
+}
+
+const LOCAL_TRANSFORMS = {
+  capitalize: text => text.replace(/\b[a-z]/g, c => c.toUpperCase()),
+  uppercase:  text => text.replace(/[a-z]/g, c => c.toUpperCase()),
+  lowercase:  text => text.replace(/[A-Z]/g, c => c.toLowerCase()),
+  trimspaces: text => text.replace(/\s+/g, ' ').trim(),
+};
+const LOCAL_LABELS = {
+  capitalize: '英文首字母大寫',
+  uppercase:  '全部英文大寫',
+  lowercase:  '全部英文小寫',
+  trimspaces: '移除多餘空格',
+};
+
+function runLocalCmd(type) {
+  if (!SUBS.length) { showToast('⚠️ 請先匯入字幕'); return; }
+  const transform = LOCAL_TRANSFORMS[type];
+  if (!transform) return;
+  pushHistory('⚡ ' + LOCAL_LABELS[type]);
+  let count = 0;
+  SUBS.forEach(s => {
+    const num = s[0];
+    const cur = edits[num] != null ? edits[num] : s[2];
+    const next = transform(cur);
+    if (next === cur) return;
+    edits[num] = next;
+    count++;
+  });
+  if (count > 0) {
+    applyEditsToDOM();
+    document.querySelectorAll('.fc[data-f]').forEach(x => x.classList.remove('on'));
+    document.querySelector('.fc[data-f="edited"]').classList.add('on');
+    curF = 'edited'; doFilter(); saveSession();
+  }
+  closeModal('commandModal');
+  showToast(count > 0
+    ? '⚡ ' + LOCAL_LABELS[type] + '｜已套用 ' + count + ' 處修改'
+    : '✅ 無需修改（程式處理）', 3000);
 }
 
 function setCmd(btn) {
@@ -848,12 +972,61 @@ function clearCmdHistory() {
   renderCmdHistory();
 }
 
+// ── Local (programmatic) Command Processor ────────────────────────────
+function tryLocalCommand(instruction) {
+  const instr = instruction;
+  let transform = null;
+
+  if (instr.includes('首字母') && instr.includes('大寫'))
+    transform = text => text.replace(/\b[a-z]/g, c => c.toUpperCase());
+  else if (instr.includes('全部') && instr.includes('英文') && instr.includes('大寫'))
+    transform = text => text.replace(/[a-z]/g, c => c.toUpperCase());
+  else if (instr.includes('全部') && instr.includes('英文') && instr.includes('小寫'))
+    transform = text => text.replace(/[A-Z]/g, c => c.toLowerCase());
+  else if (instr.includes('移除') && instr.includes('空格'))
+    transform = text => text.replace(/\s+/g, ' ').trim();
+
+  if (!transform) return null;
+
+  pushHistory('⚡ 程式指令：' + instruction.slice(0, 20) + (instruction.length > 20 ? '…' : ''));
+  let count = 0;
+  SUBS.forEach(s => {
+    const num = s[0];
+    const currentText = edits[num] != null ? edits[num] : s[2];
+    const newText = transform(currentText);
+    if (newText === currentText) return;
+    edits[num] = newText;
+    count++;
+  });
+  if (count > 0) {
+    applyEditsToDOM();
+    document.querySelectorAll('.fc[data-f]').forEach(x => x.classList.remove('on'));
+    document.querySelector('.fc[data-f="edited"]').classList.add('on');
+    curF = 'edited'; doFilter(); saveSession();
+  }
+  return { count };
+}
+
 async function runCommand() {
-  const apiKey = localStorage.getItem('claude_api_key') || '';
-  if (!apiKey) { showToast('⚠️ 請先設定 API Key（點 ⚙️）'); return; }
   if (!SUBS.length) { showToast('⚠️ 請先匯入字幕'); return; }
   const instruction = document.getElementById('commandText').value.trim();
   if (!instruction) { showToast('⚠️ 請輸入指令內容'); return; }
+
+  // ── 先嘗試本地程式處理 ──────────────────────────────────────────────
+  const localResult = tryLocalCommand(instruction);
+  if (localResult !== null) {
+    saveCmdToHistory(instruction);
+    document.getElementById('commandText').value = '';
+    closeModal('commandModal');
+    showToast(localResult.count > 0
+      ? '⚡ 程式處理，非 AI｜已套用 ' + localResult.count + ' 處修改'
+      : '✅ 此指令無需修改任何字幕（程式處理）', 3500);
+    return;
+  }
+
+  // ── 本地無法處理，走 Claude API ────────────────────────────────────
+  const apiKey = localStorage.getItem('claude_api_key') || '';
+  if (!apiKey) { showToast('⚠️ 請先設定 API Key（點 ⚙️）'); return; }
 
   // 儲存到歷史、清空輸入欄
   saveCmdToHistory(instruction);
