@@ -1,0 +1,2177 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>字幕編輯器</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&family=JetBrains+Mono&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:'Noto Sans TC',sans-serif;background:#111;color:#ddd}
+
+/* layout */
+body{display:flex;flex-direction:column}
+.bar{background:#1a1a1a;border-bottom:1px solid #2a2a2a;padding:8px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap}
+.bar-left{display:flex;flex-direction:column;gap:1px;min-width:0}
+.bar-title{font-weight:700;color:#8b7cf8;font-size:.9rem;white-space:nowrap}
+.bar-info{font-size:.72rem;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.bar-actions{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.action-btn{padding:4px 11px;border-radius:8px;border:1px solid #333;background:#1e1e1e;color:#aaa;cursor:pointer;font-size:.73rem;font-family:inherit;transition:all .15s;white-space:nowrap}
+.action-btn:hover:not(:disabled){border-color:#8b7cf8;color:#8b7cf8}
+.action-btn.has-content{border-color:#2ecc71 !important;color:#2ecc71 !important}
+.action-btn.settings-btn{padding:4px 9px;font-size:.8rem}
+.ai-btn{background:linear-gradient(135deg,#2a1f5a,#1e1a3a);border-color:#6355d0 !important;color:#a99cf8 !important}
+.ai-btn:hover:not(:disabled){background:linear-gradient(135deg,#3a2f7a,#2e2a5a) !important;border-color:#8b7cf8 !important;color:#fff !important}
+.ai-btn:disabled{opacity:.35;cursor:not-allowed}
+.filters{display:flex;gap:5px;align-items:center;margin-left:auto;flex-wrap:wrap}
+.fc{padding:3px 10px;border-radius:12px;border:1px solid #333;background:transparent;color:#666;cursor:pointer;font-size:.72rem;font-family:inherit}
+.fc:hover{border-color:#8b7cf8;color:#8b7cf8}
+.fc.on{background:#8b7cf8;color:#fff;border-color:#8b7cf8}
+.search{background:#222;border:1px solid #333;border-radius:8px;padding:4px 10px;color:#ddd;font-size:.78rem;font-family:inherit;outline:none;width:140px}
+.search:focus{border-color:#8b7cf8}
+#info{font-size:.72rem;color:#444}
+
+/* drop zone */
+.drop-zone{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;border:2px dashed #2a2a2a;margin:20px;border-radius:12px;transition:all .2s;cursor:pointer}
+.drop-zone:hover,.drop-zone.drag-over{border-color:#8b7cf8;background:rgba(139,124,248,.04)}
+body.dragging .drop-zone{border-color:#8b7cf8;background:rgba(139,124,248,.06)}
+.drop-icon{font-size:2.8rem;line-height:1}
+.drop-title{font-size:1rem;font-weight:600;color:#555}
+.drop-sub{font-size:.78rem;color:#3a3a3a}
+.drop-btn{margin-top:4px;padding:7px 22px;background:#1e1e1e;border:1px solid #3a3a3a;border-radius:8px;color:#888;cursor:pointer;font-size:.8rem;font-family:inherit}
+.drop-btn:hover{border-color:#8b7cf8;color:#8b7cf8}
+
+/* main content area (table + video side by side) */
+.content-area{flex:1;display:none;overflow:hidden;flex-direction:row}
+.content-area.has-video .tbl-wrap{flex:1}
+.content-area:not(.has-video) .tbl-wrap{flex:1}
+
+/* table */
+.tbl-wrap{flex:1;overflow-y:auto;overflow-x:hidden;display:block}
+.tbl-wrap::-webkit-scrollbar{width:5px}
+.tbl-wrap::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:3px}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+colgroup col:nth-child(1){width:54px}
+colgroup col:nth-child(2){width:88px}
+colgroup col:nth-child(3){width:50%}
+colgroup col:nth-child(4){width:50%}
+
+/* video panel */
+.video-resize-handle{width:5px;background:transparent;cursor:col-resize;flex-shrink:0;transition:background .15s;position:relative;z-index:10}
+.video-resize-handle:hover,.video-resize-handle.dragging{background:#8b7cf8}
+.video-panel{width:360px;min-width:220px;max-width:700px;background:#0d0d0d;border-left:1px solid #2a2a2a;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.video-panel-header{padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #1a1a1a;flex-shrink:0}
+.video-panel-title{font-size:.72rem;color:#555;font-weight:600;letter-spacing:.4px;text-transform:uppercase;flex:1}
+.video-close-btn{background:none;border:none;color:#444;cursor:pointer;font-size:.9rem;padding:2px 5px;border-radius:4px;line-height:1}
+.video-close-btn:hover{color:#ddd;background:#222}
+.video-drop-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;padding:20px}
+.video-drop-area:hover{background:rgba(139,124,248,.03)}
+.video-drop-icon{font-size:2rem}
+.video-drop-text{font-size:.78rem;color:#3a3a3a;text-align:center;line-height:1.6}
+.video-drop-btn{padding:5px 14px;background:#1e1e1e;border:1px solid #333;border-radius:6px;color:#666;cursor:pointer;font-size:.75rem;font-family:inherit}
+.video-drop-btn:hover{border-color:#8b7cf8;color:#8b7cf8}
+.video-player-wrap{flex:1;display:flex;flex-direction:column;gap:0;overflow:hidden}
+.video-el{width:100%;background:#000;display:block;max-height:260px;object-fit:contain}
+.video-filename{font-size:.65rem;color:#444;padding:5px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-bottom:1px solid #1a1a1a}
+.video-time-display{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:#3dd6c8;padding:5px 10px;border-bottom:1px solid #1a1a1a}
+.video-current-sub{padding:8px 10px;font-size:.82rem;color:#ddd;line-height:1.5;min-height:48px;border-bottom:1px solid #1a1a1a;background:#0a0a0a}
+.speed-btns{display:flex;gap:3px;padding-right:4px}
+.speed-btn{background:none;border:1px solid #2a2a2a;border-radius:4px;color:#444;cursor:pointer;font-size:.65rem;padding:2px 6px;font-family:'JetBrains Mono',monospace;transition:all .15s}
+.speed-btn:hover{border-color:#3dd6c8;color:#3dd6c8}
+.speed-btn.on{border-color:#3dd6c8;color:#3dd6c8;background:rgba(61,214,200,.1)}
+.video-current-sub-label{font-size:.62rem;color:#3a3a3a;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
+tbody tr.playing{background:#16161f !important}
+tbody tr.playing td:first-child{border-left:3px solid #3dd6c8 !important}
+thead th{background:#1a1a1a;padding:7px 10px;font-size:.7rem;color:#555;font-weight:600;text-align:left;border-bottom:1px solid #222;position:sticky;top:0;z-index:10;text-transform:uppercase;letter-spacing:.4px}
+tbody tr{border-bottom:1px solid #1a1a1a}
+tbody tr:hover{background:#161620}
+tbody tr.flagged td:first-child{border-left:3px solid #f5a623}
+tbody tr.edited td:first-child{border-left:3px solid #2ecc71}
+td{padding:5px 8px;vertical-align:middle;font-size:.82rem}
+td.num{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:#555;text-align:right;padding-right:10px}
+td.tc{font-family:'JetBrains Mono',monospace;font-size:.65rem;color:#3dd6c8;white-space:nowrap}
+td.tc:hover{color:#7eeee8;text-decoration:underline dotted}
+td.orig:hover{color:#ddd;background:rgba(61,214,200,.05)}
+td.orig{color:#bbb;line-height:1.4}
+td.orig.changed{color:#888;text-decoration:line-through;text-decoration-color:#555}
+
+/* inline edit */
+.edit-cell{position:relative}
+.cell-text{line-height:1.4;color:#ddd;cursor:text;min-height:22px;padding:2px 4px;border-radius:4px;display:block}
+.cell-text:hover{background:#1e1e2e}
+.cell-text.empty{color:#3a3a4a;font-style:italic}
+.cell-text.ai-suggest{color:#f5a623}
+.cell-input{width:100%;background:#1e1e2e;border:1px solid #8b7cf8;border-radius:4px;padding:3px 6px;color:#fff;font-size:.82rem;font-family:inherit;outline:none;resize:none;line-height:1.4}
+.cell-input:focus{border-color:#a99cf8;box-shadow:0 0 0 2px rgba(139,124,248,.15)}
+.undo-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:#2a1a10;border:1px solid #f5a623;border-radius:4px;color:#f5a623;font-size:.65rem;padding:1px 6px;cursor:pointer;opacity:0;transition:opacity .15s;white-space:nowrap}
+tr:hover .undo-btn{opacity:1}
+.delete-row-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:#1a1010;border:1px solid #444;border-radius:4px;color:#555;font-size:.65rem;padding:1px 6px;cursor:pointer;opacity:0;transition:all .15s;white-space:nowrap;line-height:1.5}
+.delete-row-btn:hover{border-color:#e74c3c;color:#e74c3c;background:#2a1010}
+tr:hover .delete-row-btn{opacity:1}
+td.tc{position:relative}
+.insert-btn{position:absolute;left:50%;bottom:-9px;transform:translateX(-50%);background:#1a1a2e;border:1px solid #333;border-radius:10px;color:#555;font-size:.65rem;padding:0px 7px;cursor:pointer;opacity:0;transition:all .15s;white-space:nowrap;z-index:5;line-height:1.6}
+.insert-btn:hover{border-color:#8b7cf8;color:#8b7cf8;background:#1e1a3a}
+tr:hover .insert-btn{opacity:1}
+td.num{position:relative}
+
+/* bottom bar */
+.bottom{background:#1a1a1a;border-top:1px solid #2a2a2a;padding:8px 14px;display:none;align-items:center;gap:10px;flex-shrink:0}
+.bottom-info{font-size:.75rem;color:#666}
+.save-info{font-size:.68rem;color:#3a3a3a;margin-right:auto}
+.copy-btn{padding:7px 18px;background:linear-gradient(135deg,#8b7cf8,#6355d0);border:none;border-radius:8px;color:#fff;font-size:.82rem;font-weight:700;font-family:inherit;cursor:pointer;transition:all .2s}
+.copy-btn:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(139,124,248,.4)}
+.copy-btn.ok{background:linear-gradient(135deg,#2ecc71,#1a9a52)}
+.export-btn{padding:7px 18px;background:linear-gradient(135deg,#1a3a26,#112a1a);border:1px solid #2a5a38;border-radius:8px;color:#2ecc71;font-size:.82rem;font-weight:700;font-family:inherit;cursor:pointer;transition:all .2s}
+.export-btn:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(46,204,113,.25);border-color:#2ecc71}
+.version-btn{padding:7px 14px;background:#1e1e1e;border:1px solid #333;border-radius:8px;color:#aaa;font-size:.82rem;font-weight:700;font-family:inherit;cursor:pointer;transition:all .2s}
+.version-btn:hover{border-color:#8b7cf8;color:#8b7cf8}
+
+/* version modal */
+.version-list{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;padding-right:4px}
+.version-list::-webkit-scrollbar{width:4px}
+.version-list::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:3px}
+.version-item{display:flex;align-items:center;gap:10px;background:#161616;border:1px solid #2a2a2a;border-radius:8px;padding:10px 12px}
+.version-item-info{flex:1;min-width:0}
+.version-item-name{font-size:.82rem;color:#ddd;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.version-item-meta{font-size:.68rem;color:#555;margin-top:2px}
+.version-item-actions{display:flex;gap:6px;flex-shrink:0}
+.version-item-actions button{padding:3px 10px;border-radius:5px;border:1px solid #2a2a2a;background:transparent;cursor:pointer;font-size:.7rem;font-family:inherit;transition:all .15s}
+.version-load-btn{color:#8b7cf8 !important;border-color:#2a2060 !important}
+.version-load-btn:hover{background:#1e1a3a !important;border-color:#8b7cf8 !important}
+.version-load-btn.active{background:#8b7cf8 !important;color:#fff !important;border-color:#8b7cf8 !important}
+.version-dl-btn{color:#2ecc71 !important;border-color:#2a4a38 !important}
+.version-dl-btn:hover{background:#1a3a26 !important;border-color:#2ecc71 !important}
+.version-del-btn{color:#666 !important}
+.version-del-btn:hover{color:#e74c3c !important;border-color:#4a2020 !important;background:#2a1010 !important}
+.version-item.loaded{border-color:#8b7cf8;background:#1a1830}
+.version-empty{font-size:.78rem;color:#444;text-align:center;padding:24px 0}
+.version-name-input{width:100%;background:#222;border:1px solid #333;border-radius:6px;padding:8px 10px;color:#ddd;font-size:.85rem;font-family:inherit;outline:none;margin-bottom:4px}
+.version-name-input:focus{border-color:#8b7cf8}
+
+/* toast */
+.toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(8px);background:#333;color:#ddd;padding:8px 18px;border-radius:16px;font-size:.8rem;font-weight:600;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* find & replace bar */
+.fnr-bar{background:#161622;border-bottom:1px solid #2a2a2a;padding:6px 14px;display:none;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.fnr-bar.open{display:flex}
+.fnr-input{background:#222;border:1px solid #333;border-radius:6px;padding:4px 10px;color:#ddd;font-size:.8rem;font-family:inherit;outline:none;width:180px}
+.fnr-input:focus{border-color:#8b7cf8}
+.fnr-input.has-match{border-color:#2ecc71}
+.fnr-input.no-match{border-color:#e74c3c}
+.fnr-sep{width:1px;height:18px;background:#2a2a2a;flex-shrink:0}
+.fnr-count{font-size:.72rem;color:#555;min-width:60px;white-space:nowrap}
+.fnr-btn{padding:4px 12px;border-radius:6px;border:1px solid #333;background:#1e1e1e;color:#aaa;cursor:pointer;font-size:.73rem;font-family:inherit;transition:all .15s;white-space:nowrap}
+.fnr-btn:hover{border-color:#8b7cf8;color:#8b7cf8}
+.fnr-btn.replace-all{border-color:#2a5a38;color:#2ecc71;background:#0d1f14}
+.fnr-btn.replace-all:hover{border-color:#2ecc71;background:#132b1a}
+.fnr-btn.close{margin-left:auto;padding:3px 8px;color:#444;border-color:transparent;background:transparent}
+.fnr-btn.close:hover{color:#ddd;border-color:#333;background:#222}
+.fnr-match-opt{display:flex;align-items:center;gap:4px;font-size:.7rem;color:#555;cursor:pointer;user-select:none}
+.fnr-match-opt input{accent-color:#8b7cf8;cursor:pointer}
+/* highlight matched text in table */
+.fnr-hl{background:#3d2e00;color:#ffc107;border-radius:2px}
+.fnr-hl.current{background:#7a5c00;outline:1px solid #ffc107}
+
+/* keyboard shortcut hint bar */
+.kbd-bar{position:fixed;bottom:0;left:0;right:0;background:#0f0f0f;border-top:1px solid #1e1e1e;padding:3px 16px;display:flex;gap:18px;align-items:center;z-index:500;opacity:0;transition:opacity .2s;pointer-events:none;flex-wrap:wrap}
+.kbd-bar.visible{opacity:1}
+.kbd-hint{display:flex;align-items:center;gap:5px;font-size:.62rem;color:#444}
+.kbd{background:#1e1e1e;border:1px solid #333;border-radius:4px;padding:1px 6px;font-family:'JetBrains Mono',monospace;font-size:.62rem;color:#666;white-space:nowrap}
+
+/* modals */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:1000}
+.modal{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:22px;width:420px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;gap:10px}
+.modal-lg{width:640px}
+.modal-title{font-weight:700;color:#8b7cf8;font-size:.95rem}
+.modal-label{font-size:.75rem;color:#777;margin-bottom:-4px}
+.modal-note{font-size:.68rem;color:#444;line-height:1.5}
+.modal-note a{color:#8b7cf8;text-decoration:none}
+.modal-note a:hover{text-decoration:underline}
+.modal input[type="password"]{width:100%;background:#222;border:1px solid #333;border-radius:6px;padding:8px 10px;color:#ddd;font-size:.85rem;font-family:inherit;outline:none}
+.modal input[type="password"]:focus{border-color:#8b7cf8}
+.modal textarea{flex:1;min-height:280px;width:100%;background:#222;border:1px solid #333;border-radius:6px;padding:8px 10px;color:#ddd;font-size:.8rem;font-family:inherit;resize:none;outline:none;line-height:1.5}
+.modal textarea:focus{border-color:#8b7cf8}
+.modal-file-btn{padding:5px 12px;background:#222;border:1px solid #333;border-radius:6px;color:#888;font-size:.72rem;cursor:pointer;font-family:inherit}
+.modal-file-btn:hover{border-color:#8b7cf8;color:#8b7cf8}
+.modal-char-count{font-size:.68rem;color:#444}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+.modal-btns button{padding:6px 18px;border-radius:7px;border:none;cursor:pointer;font-size:.82rem;font-family:inherit;transition:all .15s}
+.modal-btns .btn-primary{background:#8b7cf8;color:#fff}
+.modal-btns .btn-primary:hover{background:#7a6be0}
+.modal-btns .btn-cancel{background:#2a2a2a;color:#888}
+.modal-btns .btn-cancel:hover{background:#333}
+
+/* command modal textarea override */
+.modal-cmd textarea{min-height:100px;resize:vertical}
+.cmd-examples{display:flex;flex-direction:column;gap:4px;margin-bottom:4px}
+.cmd-example{font-size:.72rem;color:#555;cursor:pointer;padding:4px 8px;border-radius:5px;border:1px solid #2a2a2a;background:#161616;transition:all .15s;text-align:left;font-family:inherit}
+.cmd-example:hover{border-color:#8b7cf8;color:#a99cf8}
+.cmd-history-item{color:#666;border-color:#222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.cmd-history-item:hover{border-color:#8b7cf8;color:#a99cf8}
+
+/* AI overlay */
+.ai-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:2000;gap:16px}
+.ai-spinner{width:44px;height:44px;border:3px solid #2a2a2a;border-top-color:#8b7cf8;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ai-status{color:#888;font-size:.88rem}
+</style>
+</head>
+<body>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-title">⚙️ 設定 Claude API</div>
+    <div class="modal-label">API Key</div>
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-...">
+    <div class="modal-note">
+      還沒有 API Key？前往 <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 免費申請。<br>
+      Key 僅儲存在您的瀏覽器本機，不會上傳到任何地方。<br>
+      請勿將此 HTML 檔分享給他人（含您的 Key）。<br><br>
+      每次分析約消耗 10,000–20,000 tokens，費用約 <strong style="color:#ddd">US$0.05</strong>。
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('settingsModal')">取消</button>
+      <button class="btn-primary" onclick="saveApiKey()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Guidance Modal -->
+<div class="modal-overlay" id="guidanceModal">
+  <div class="modal modal-lg">
+    <div class="modal-title">📄 訪綱 / 編輯指引</div>
+    <div class="modal-note">
+      從 Google Doc 複製貼上，或上傳 .txt / .md 檔。<br>
+      Claude 會參考此內容校對字幕中的人名、地名、專有名詞。
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="modal-file-btn" onclick="document.getElementById('guidanceFile').click()">📁 上傳檔案</button>
+      <input type="file" id="guidanceFile" accept=".txt,.md" style="display:none">
+      <span class="modal-char-count" id="guidanceCharCount"></span>
+    </div>
+    <textarea id="guidanceTextArea" placeholder="在此貼上訪綱或編輯指引內容...
+
+例如：
+- 主持人：陳XX（非陳XX）
+- 來賓：林XX，職銜為XX長
+- 提到的書名：《XXX》
+- 公司名：XX股份有限公司"></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('guidanceModal')">取消</button>
+      <button class="btn-primary" onclick="saveGuidance()">儲存訪綱</button>
+    </div>
+  </div>
+</div>
+
+<!-- Command Modal -->
+<div class="modal-overlay" id="commandModal">
+  <div class="modal modal-lg modal-cmd">
+    <div class="modal-title">📝 批次指令編輯</div>
+    <div class="modal-note">輸入一段指令，Claude 會自動套用到所有字幕條目並產生修改建議。</div>
+    <div class="modal-label" style="margin-bottom:6px">常用指令（點擊套用）</div>
+    <div class="cmd-examples">
+      <button class="cmd-example" onclick="setCmd(this)">人物的代名詞統一用『他』，物品用『它』</button>
+      <button class="cmd-example" onclick="setCmd(this)">所有數字改用中文（例如 3 → 三、100 → 一百）</button>
+      <button class="cmd-example" onclick="setCmd(this)">移除所有語助詞和重複贅字（例如「就是說」、「然後然後」）</button>
+    </div>
+    <div id="cmdHistorySection" style="display:none">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;margin-bottom:6px">
+        <span class="modal-label" style="margin:0">歷史指令</span>
+        <button onclick="clearCmdHistory()" style="background:none;border:none;color:#555;cursor:pointer;font-size:.68rem;padding:0;font-family:inherit">清除</button>
+      </div>
+      <div id="cmdHistoryList" class="cmd-examples" style="flex-wrap:wrap"></div>
+    </div>
+    <div class="modal-label" style="margin-top:10px">自訂指令</div>
+    <textarea id="commandText" placeholder="例如：把所有『他媽的』換成『天哪』&#10;例如：人名『小明』全部改成『小名』&#10;例如：所有英文單字首字母改大寫"></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('commandModal')">取消</button>
+      <button class="btn-primary" id="runCmdBtn" onclick="runCommand()">✨ 執行指令</button>
+    </div>
+  </div>
+</div>
+
+<!-- Glossary Modal -->
+<div class="modal-overlay" id="glossaryModal">
+  <div class="modal modal-lg">
+    <div class="modal-title">📚 自訂詞庫</div>
+    <div class="modal-note">
+      定義節目專有名詞，讓 Claude 不會誤改這些詞。每行一條，支援兩種格式：<br>
+      <code style="color:#8b7cf8;font-size:.78rem">台積電</code> — 保護詞（不被修改）&nbsp;&nbsp;
+      <code style="color:#8b7cf8;font-size:.78rem">軟件→軟體</code> — 強制更正對照&nbsp;&nbsp;
+      <code style="color:#555;font-size:.78rem"># 這是註解</code>
+    </div>
+    <textarea id="glossaryTextArea" placeholder="例如：&#10;台積電&#10;賴清德&#10;立法院&#10;# 常見 ASR 錯誤&#10;軟件→軟體&#10;視頻→影片&#10;網絡→網路"></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('glossaryModal')">取消</button>
+      <button class="btn-primary" onclick="saveGlossary()">儲存詞庫</button>
+    </div>
+  </div>
+</div>
+
+<!-- Insert Subtitle Modal -->
+<div class="modal-overlay" id="insertModal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-title">➕ 新增字幕條目</div>
+    <div class="modal-note" id="insertModalNote"></div>
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <div style="flex:1">
+        <div class="modal-label">開始時間碼</div>
+        <input id="insertStart" class="search" style="width:100%;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:.78rem" placeholder="00:00:00,000">
+      </div>
+      <div style="flex:1">
+        <div class="modal-label">結束時間碼</div>
+        <input id="insertEnd" class="search" style="width:100%;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:.78rem" placeholder="00:00:02,000">
+      </div>
+    </div>
+    <div class="modal-label" style="margin-top:10px">字幕文字</div>
+    <textarea id="insertText" style="width:100%;background:#222;border:1px solid #333;border-radius:6px;padding:8px 10px;color:#ddd;font-size:.82rem;font-family:inherit;resize:none;outline:none;line-height:1.5;min-height:70px;margin-top:4px" placeholder="輸入字幕內容…"></textarea>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('insertModal')">取消</button>
+      <button class="btn-primary" onclick="confirmInsertSubtitle()">➕ 新增</button>
+    </div>
+  </div>
+</div>
+
+<!-- Top Bar -->
+<div class="bar">
+  <div class="bar-left">
+    <span class="bar-title">字幕編輯器</span>
+    <span class="bar-info" id="fileInfo">尚未載入字幕</span>
+  </div>
+  <div class="bar-actions">
+    <button class="action-btn" id="importBtn">📂 匯入字幕</button>
+    <input type="file" id="srtFile" accept=".srt,.vtt,.sbv" style="display:none">
+    <button class="action-btn" id="guidanceBtn" onclick="openGuidanceModal()">📄 訪綱</button>
+    <button class="action-btn" id="glossaryBtn" onclick="openGlossaryModal()">📚 詞庫</button>
+    <button class="action-btn ai-btn" id="aiBtn" disabled title="請先匯入字幕並設定 API Key">✨ AI 分析</button>
+    <button class="action-btn" id="cmdBtn" disabled title="請先匯入字幕並設定 API Key" onclick="openCommandModal()">📝 指令</button>
+    <button class="action-btn" id="undoBtn" disabled onclick="undoHistory()" title="沒有可復原的操作">↩ 復原</button>
+    <button class="action-btn" id="videoBtn" onclick="toggleVideoPanel()">🎬 影片</button>
+    <button class="action-btn settings-btn" onclick="openSettingsModal()" title="設定 API Key">⚙️</button>
+  </div>
+  <div class="filters" id="filtersBar" style="display:none">
+    <button class="fc on" data-f="all">全部</button>
+    <button class="fc" data-f="flagged">有建議</button>
+    <button class="fc" data-f="edited">已修改</button>
+    <button class="fc" data-f="pending">待處理</button>
+    <input class="search" id="search" placeholder="搜尋…" oninput="doFilter()">
+    <span id="info"></span>
+  </div>
+</div>
+
+<!-- Find & Replace Bar -->
+<div class="fnr-bar" id="fnrBar">
+  <span style="font-size:.72rem;color:#555;white-space:nowrap">搜尋</span>
+  <input class="fnr-input" id="fnrFind" placeholder="搜尋文字…" autocomplete="off" spellcheck="false">
+  <span style="font-size:.72rem;color:#555;white-space:nowrap">取代</span>
+  <input class="fnr-input" id="fnrReplace" placeholder="取代為…" autocomplete="off" spellcheck="false">
+  <div class="fnr-sep"></div>
+  <span class="fnr-count" id="fnrCount"></span>
+  <button class="fnr-btn" id="fnrPrev" onclick="fnrStep(-1)" title="上一個 (⇧Enter)">↑</button>
+  <button class="fnr-btn" id="fnrNext" onclick="fnrStep(1)"  title="下一個 (Enter)">↓</button>
+  <button class="fnr-btn" onclick="fnrReplaceCurrent()" title="取代目前">取代</button>
+  <button class="fnr-btn replace-all" onclick="fnrReplaceAll()">全部取代</button>
+  <label class="fnr-match-opt" title="區分大小寫">
+    <input type="checkbox" id="fnrCase"> Aa
+  </label>
+  <label class="fnr-match-opt" title="正規表達式">
+    <input type="checkbox" id="fnrRegex"> .*
+  </label>
+  <button class="fnr-btn close" onclick="closeFnr()" title="關閉 (Esc)">✕</button>
+</div>
+
+<!-- Drop Zone (welcome state) -->
+<div class="drop-zone" id="dropZone" onclick="document.getElementById('srtFile').click()">
+  <div class="drop-icon">🎬</div>
+  <div class="drop-title">拖曳字幕檔到這裡</div>
+  <div class="drop-sub">支援 .srt、.vtt 和 .sbv 格式</div>
+  <button class="drop-btn" onclick="event.stopPropagation();document.getElementById('srtFile').click()">選擇檔案</button>
+</div>
+
+<!-- Main content area -->
+<div class="content-area" id="contentArea">
+
+  <!-- Table -->
+  <div class="tbl-wrap" id="wrap">
+    <table>
+      <colgroup><col><col><col><col></colgroup>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>時間碼</th>
+          <th>原始字幕</th>
+          <th>修改內容（點擊編輯）</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Video Panel Resize Handle -->
+  <div class="video-resize-handle" id="videoResizeHandle" style="display:none"></div>
+
+  <!-- Video Panel -->
+  <div class="video-panel" id="videoPanel" style="display:none">
+    <div class="video-panel-header">
+      <span class="video-panel-title">🎬 影片預覽</span>
+      <button class="video-close-btn" onclick="closeVideoPanel()" title="關閉影片">✕</button>
+    </div>
+    <!-- Drop area (before video loaded) -->
+    <div class="video-drop-area" id="videoDrop" onclick="document.getElementById('videoFile').click()">
+      <div class="video-drop-icon">🎥</div>
+      <div class="video-drop-text">拖曳影片到這裡<br>或點擊選擇檔案<br><span style="color:#2a2a2a;font-size:.68rem">支援 mp4 / mov / webm / mkv</span></div>
+      <button class="video-drop-btn" onclick="event.stopPropagation();document.getElementById('videoFile').click()">選擇影片</button>
+    </div>
+    <!-- Player (after video loaded) -->
+    <div class="video-player-wrap" id="videoPlayerWrap" style="display:none">
+      <video class="video-el" id="videoEl" controls></video>
+      <div class="video-filename" id="videoFilename"></div>
+      <div class="video-time-display" style="display:flex;align-items:center;justify-content:space-between">
+        <span id="videoTimeDisplay">00:00:00</span>
+        <div class="speed-btns">
+          <button class="speed-btn" onclick="setSpeed(1)">1x</button>
+          <button class="speed-btn on" onclick="setSpeed(1.2)">1.2x</button>
+          <button class="speed-btn" onclick="setSpeed(1.5)">1.5x</button>
+          <button class="speed-btn" onclick="setSpeed(2)">2x</button>
+        </div>
+      </div>
+      <div class="video-current-sub" id="videoCurrentSub">
+        <div class="video-current-sub-label">目前字幕</div>
+        <div id="videoSubText">—</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<input type="file" id="videoFile" accept="video/*" style="display:none">
+
+<!-- Version Modal -->
+<div class="modal-overlay" id="versionModal">
+  <div class="modal" style="width:480px">
+    <div class="modal-title">📁 版本管理</div>
+
+    <div class="modal-label">儲存目前版本</div>
+    <input class="version-name-input" type="text" id="versionNameInput" placeholder="版本名稱（例如：代名詞修正完成）">
+    <div class="modal-btns" style="justify-content:flex-start;margin-bottom:16px">
+      <button class="btn-primary" onclick="saveVersion()">💾 儲存版本</button>
+    </div>
+
+    <div class="modal-label" style="margin-bottom:8px">已儲存的版本</div>
+    <div class="version-list" id="versionList"></div>
+
+    <div class="modal-btns" style="margin-top:12px">
+      <button class="btn-cancel" onclick="closeModal('versionModal')">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Bar -->
+<div class="bottom" id="bottomBar">
+  <div class="bottom-info" id="binfo">尚無修改</div>
+  <span class="save-info" id="saveInfo"></span>
+  <button class="copy-btn" id="copybtn" onclick="doCopy()">📋 複製給 Claude</button>
+  <button class="export-btn" onclick="exportSRT()">💾 匯出 SRT</button>
+  <button class="version-btn" onclick="openVersionModal()">📁 版本</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Keyboard shortcut hint bar (shows on ? key) -->
+<div class="kbd-bar" id="kbdBar">
+  <span class="kbd-hint"><kbd class="kbd">Space</kbd> 播放／暫停</span>
+  <span class="kbd-hint"><kbd class="kbd">←</kbd><kbd class="kbd">→</kbd> 跳退／跳進 5 秒</span>
+  <span class="kbd-hint"><kbd class="kbd">⇧←</kbd><kbd class="kbd">⇧→</kbd> 跳退／跳進 30 秒</span>
+  <span class="kbd-hint"><kbd class="kbd">Tab</kbd> 下一條字幕</span>
+  <span class="kbd-hint"><kbd class="kbd">⇧Tab</kbd> 上一條字幕</span>
+  <span class="kbd-hint"><kbd class="kbd">⌘S</kbd> 儲存版本</span>
+  <span class="kbd-hint"><kbd class="kbd">Esc</kbd> 取消編輯</span>
+  <span class="kbd-hint" style="margin-left:auto;color:#2a2a2a"><kbd class="kbd">?</kbd> 顯示／隱藏</span>
+</div>
+
+<!-- AI Loading Overlay -->
+<div class="ai-overlay" id="aiOverlay">
+  <div class="ai-spinner"></div>
+  <div class="ai-status" id="aiStatus">Claude 正在分析字幕…</div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+let SUBS = [];
+let edits = {};
+let undoStack = [];
+const UNDO_LIMIT = 30;
+let curF = 'all', curQ = '';
+let currentFilename = '';
+let guidanceText = '';
+let currentVersionId = null; // 目前載入的版本 ID（null = 未從版本載入）
+
+// ── Init ───────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  setupFileInputs();
+  setupDragDrop();
+  setupFilterBtns();
+  setupVideoInput();
+  setupKeyboardShortcuts();
+  setupFnrInputs();
+  setupVideoPanelResize();
+
+  // Restore guidance
+  guidanceText = localStorage.getItem('guidance_text') || '';
+  if (guidanceText) {
+    document.getElementById('guidanceBtn').textContent = '📄 訪綱 ✓';
+    document.getElementById('guidanceBtn').classList.add('has-content');
+    document.getElementById('guidanceTextArea').value = guidanceText;
+  }
+
+  // Restore glossary
+  const savedGlossary = localStorage.getItem('glossary_text') || '';
+  if (savedGlossary) {
+    document.getElementById('glossaryBtn').textContent = '📚 詞庫 ✓';
+    document.getElementById('glossaryBtn').classList.add('has-content');
+  }
+
+  loadSession();
+  updateAIButton();
+});
+
+// ── File Input Setup ───────────────────────────────────────────────────
+function setupFileInputs() {
+  document.getElementById('importBtn').addEventListener('click', () => {
+    document.getElementById('srtFile').click();
+  });
+  document.getElementById('srtFile').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) loadSubtitleFile(f);
+    e.target.value = '';
+  });
+  document.getElementById('guidanceFile').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      document.getElementById('guidanceTextArea').value = ev.target.result;
+      updateGuidanceCharCount();
+    };
+    r.readAsText(f, 'UTF-8');
+    e.target.value = '';
+  });
+  document.getElementById('guidanceTextArea').addEventListener('input', updateGuidanceCharCount);
+}
+
+function updateGuidanceCharCount() {
+  const n = document.getElementById('guidanceTextArea').value.length;
+  document.getElementById('guidanceCharCount').textContent = n > 0 ? n.toLocaleString() + ' 字' : '';
+}
+
+// ── Drag & Drop ────────────────────────────────────────────────────────
+function setupDragDrop() {
+  document.addEventListener('dragover', e => {
+    e.preventDefault();
+    document.body.classList.add('dragging');
+  });
+  document.addEventListener('dragleave', e => {
+    if (!e.relatedTarget) document.body.classList.remove('dragging');
+  });
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    document.body.classList.remove('dragging');
+    const f = e.dataTransfer.files[0];
+    if (f && /\.(srt|vtt)$/i.test(f.name)) {
+      loadSubtitleFile(f);
+    } else if (f) {
+      showToast('⚠️ 請拖入 .srt、.vtt 或 .sbv 檔案');
+    }
+  });
+}
+
+// ── SRT / VTT Parsers ──────────────────────────────────────────────────
+function parseSRT(raw) {
+  const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const tcRe = /^\d{2}:\d{2}:\d{2}[,.]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[,.]\d{3}/;
+  const result = [];
+  let counter = 0;
+  for (const block of text.trim().split(/\n\s*\n/)) {
+    const lines = block.trim().split('\n');
+    if (!lines.length) continue;
+    const tcIdx = lines.findIndex(l => tcRe.test(l.trim()));
+    if (tcIdx < 0) continue;
+    const numLine = lines.slice(0, tcIdx).join(' ').trim();
+    const num = parseInt(numLine, 10) || ++counter;
+    const tc = lines[tcIdx].trim().replace(/\./g, ',');
+    const txt = lines.slice(tcIdx + 1).join('\n').trim();
+    if (txt) result.push([num, tc, txt, 0]);
+  }
+  return result;
+}
+
+function parseVTT(raw) {
+  const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const tcRe = /^\d{2}:\d{2}:\d{2}[,.]\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}[,.]\d{3}/;
+  // Remove WEBVTT header block
+  const body = text.replace(/^WEBVTT[^\n]*\n/, '').trim();
+  const result = [];
+  let counter = 0;
+  for (const block of body.split(/\n\s*\n/)) {
+    const lines = block.trim().split('\n');
+    if (!lines.length) continue;
+    const tcIdx = lines.findIndex(l => tcRe.test(l.trim()));
+    if (tcIdx < 0) continue;
+    const numLine = lines.slice(0, tcIdx).join(' ').trim();
+    const num = /^\d+$/.test(numLine) ? parseInt(numLine, 10) : ++counter;
+    const tc = lines[tcIdx].trim().replace(/\./g, ',');
+    const txt = lines.slice(tcIdx + 1).join('\n').trim();
+    if (txt) result.push([num, tc, txt, 0]);
+  }
+  return result;
+}
+
+function parseSBV(raw) {
+  const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // SBV timecode: H:MM:SS.mmm,H:MM:SS.mmm
+  const tcRe = /^\d+:\d{2}:\d{2}\.\d{3},\d+:\d{2}:\d{2}\.\d{3}/;
+  const result = [];
+  let counter = 0;
+  for (const block of text.trim().split(/\n\s*\n/)) {
+    const lines = block.trim().split('\n');
+    if (!lines.length) continue;
+    const tcIdx = lines.findIndex(l => tcRe.test(l.trim()));
+    if (tcIdx < 0) continue;
+    // Convert SBV timecode → SRT format (pad hours to 2 digits, comma for ms, --> separator)
+    const sbvTc = lines[tcIdx].trim();
+    const [startRaw, endRaw] = sbvTc.split(',');
+    const padTc = t => {
+      const parts = t.split(':');
+      while (parts.length < 3) parts.unshift('0');
+      const [h, m, s] = parts;
+      return h.padStart(2,'0') + ':' + m.padStart(2,'0') + ':' + s.replace('.', ',');
+    };
+    const tc = padTc(startRaw) + ' --> ' + padTc(endRaw);
+    const txt = lines.slice(tcIdx + 1).join('\n').trim();
+    if (txt) result.push([++counter, tc, txt, 0]);
+  }
+  return result;
+}
+
+// ── Load Subtitle File ─────────────────────────────────────────────────
+function loadSubtitleFile(file) {
+  const r = new FileReader();
+  r.onload = ev => {
+    const text = ev.target.result;
+    let parsed;
+    if (/\.vtt$/i.test(file.name)) parsed = parseVTT(text);
+    else if (/\.sbv$/i.test(file.name)) parsed = parseSBV(text);
+    else parsed = parseSRT(text);
+    if (!parsed.length) { showToast('⚠️ 無法解析此字幕檔，請確認格式正確'); return; }
+    SUBS = parsed;
+    edits = {};
+    currentFilename = file.name.replace(/\.(srt|vtt|sbv)$/i, '');
+    document.getElementById('fileInfo').textContent = currentFilename + ' ｜ ' + SUBS.length + ' 條';
+    rebuildTable();
+    showTableUI();
+    saveSession();
+    updateAIButton();
+    showToast('✅ 已載入 ' + SUBS.length + ' 條字幕');
+  };
+  r.readAsText(file, 'UTF-8');
+}
+
+// ── UI State ───────────────────────────────────────────────────────────
+// ── Undo ───────────────────────────────────────────────────────────────
+function pushHistory(label) {
+  undoStack.push({
+    label: label || '操作',
+    SUBS: SUBS.map(s => [...s]),
+    edits: {...edits},
+  });
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  updateUndoBtn();
+}
+
+function undoHistory() {
+  if (!undoStack.length) { showToast('沒有可復原的操作'); return; }
+  const snap = undoStack.pop();
+  SUBS = snap.SUBS;
+  edits = snap.edits;
+  rebuildTable();
+  applyEditsToDOM();
+  saveSession();
+  updateUndoBtn();
+  showToast('↩ 已復原：' + snap.label);
+}
+
+function updateUndoBtn() {
+  const btn = document.getElementById('undoBtn');
+  if (!btn) return;
+  btn.disabled = undoStack.length === 0;
+  btn.title = undoStack.length
+    ? '復原：' + undoStack[undoStack.length - 1].label + '（⌘Z）'
+    : '沒有可復原的操作';
+}
+
+function showTableUI() {
+  document.getElementById('dropZone').style.display = 'none';
+  document.getElementById('contentArea').style.display = 'flex';
+  document.getElementById('bottomBar').style.display = 'flex';
+  document.getElementById('filtersBar').style.display = 'flex';
+}
+
+function rebuildTable() {
+  document.getElementById('tbody').innerHTML = '';
+  buildTable();
+  doFilter();
+}
+
+// ── Session Persistence ────────────────────────────────────────────────
+function saveSession() {
+  try {
+    localStorage.setItem('subtitle_session', JSON.stringify({
+      subs: SUBS, edits, filename: currentFilename, savedAt: new Date().toISOString()
+    }));
+    const t = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('saveInfo').textContent = '已儲存 ' + t;
+  } catch(e) { /* storage full or blocked */ }
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem('subtitle_session');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data.subs || !data.subs.length) return;
+    SUBS = data.subs;
+    edits = data.edits || {};
+    currentFilename = data.filename || '';
+    const savedAt = data.savedAt ? new Date(data.savedAt).toLocaleString('zh-TW') : '之前';
+    document.getElementById('fileInfo').textContent = currentFilename + ' ｜ ' + SUBS.length + ' 條';
+    rebuildTable();
+    applyEditsToDOM();
+    showTableUI();
+    updateAIButton();
+    const t = new Date(data.savedAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('saveInfo').textContent = '已儲存 ' + t;
+    showToast('↩️ 已恢復上次進度（' + savedAt + '）', 3000);
+  } catch(e) { /* ignore */ }
+}
+
+function applyEditsToDOM() {
+  Object.entries(edits).forEach(([numStr, val]) => {
+    const num = parseInt(numStr, 10);
+    const s = SUBS.find(x => x[0] === num);
+    if (!s) return;
+    const tr = document.getElementById('tr' + num);
+    if (!tr) return;
+    const span = document.getElementById('ct' + num);
+    if (span) {
+      span.textContent = val;
+      span.style.color = '#2ecc71';
+      span.className = 'cell-text';
+    }
+    tr.classList.remove('flagged');
+    tr.classList.add('edited');
+    const tdO = tr.querySelectorAll('td')[2];
+    if (tdO) tdO.classList.add('changed');
+    const ub = document.getElementById('ub' + num);
+    if (ub) ub.style.display = '';
+  });
+  updateStats();
+}
+
+// ── Settings / API Key ─────────────────────────────────────────────────
+function openSettingsModal() {
+  document.getElementById('apiKeyInput').value = localStorage.getItem('claude_api_key') || '';
+  showModal('settingsModal');
+}
+
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (key) localStorage.setItem('claude_api_key', key);
+  else localStorage.removeItem('claude_api_key');
+  closeModal('settingsModal');
+  updateAIButton();
+  showToast(key ? '✅ API Key 已儲存' : '🗑 API Key 已清除');
+}
+
+function updateAIButton() {
+  const key = localStorage.getItem('claude_api_key') || '';
+  const ready = !!key && SUBS.length > 0;
+  const aiBtn = document.getElementById('aiBtn');
+  const cmdBtn = document.getElementById('cmdBtn');
+  aiBtn.disabled = !ready;
+  cmdBtn.disabled = !ready;
+  const hint = !key ? '請先在 ⚙️ 設定中輸入 API Key' : (!SUBS.length ? '請先匯入字幕' : '');
+  aiBtn.title = hint || '以 Claude 自動分析字幕';
+  cmdBtn.title = hint || '輸入批次指令修改字幕';
+}
+
+// ── Command Modal ───────────────────────────────────────────────────────
+function openCommandModal() {
+  renderCmdHistory();
+  showModal('commandModal');
+  setTimeout(() => document.getElementById('commandText').focus(), 100);
+}
+
+function setCmd(btn) {
+  document.getElementById('commandText').value = btn.textContent.trim();
+  document.getElementById('commandText').focus();
+}
+
+function renderCmdHistory() {
+  const history = JSON.parse(localStorage.getItem('cmd_history') || '[]');
+  const section = document.getElementById('cmdHistorySection');
+  const list = document.getElementById('cmdHistoryList');
+  if (!history.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  list.innerHTML = '';
+  history.forEach(cmd => {
+    const btn = document.createElement('button');
+    btn.className = 'cmd-example cmd-history-item';
+    btn.textContent = cmd;
+    btn.title = cmd;
+    btn.onclick = () => {
+      document.getElementById('commandText').value = cmd;
+      document.getElementById('commandText').focus();
+    };
+    list.appendChild(btn);
+  });
+}
+
+function saveCmdToHistory(cmd) {
+  let history = JSON.parse(localStorage.getItem('cmd_history') || '[]');
+  history = [cmd, ...history.filter(c => c !== cmd)].slice(0, 10); // 最多保留10筆，去重
+  localStorage.setItem('cmd_history', JSON.stringify(history));
+}
+
+function clearCmdHistory() {
+  localStorage.removeItem('cmd_history');
+  renderCmdHistory();
+}
+
+async function runCommand() {
+  const apiKey = localStorage.getItem('claude_api_key') || '';
+  if (!apiKey) { showToast('⚠️ 請先設定 API Key（點 ⚙️）'); return; }
+  if (!SUBS.length) { showToast('⚠️ 請先匯入字幕'); return; }
+  const instruction = document.getElementById('commandText').value.trim();
+  if (!instruction) { showToast('⚠️ 請輸入指令內容'); return; }
+
+  // 儲存到歷史、清空輸入欄
+  saveCmdToHistory(instruction);
+  document.getElementById('commandText').value = '';
+  closeModal('commandModal');
+
+  // Use current effective text (edited > original)
+  const srtText = SUBS.map(([n, tc, txt]) => {
+    const cur = edits[n] || txt;
+    return n + '\n' + tc + '\n' + cur;
+  }).join('\n\n');
+
+  const glossaryText = loadGlossary();
+  const glossarySection = glossaryText ? `\n【專案詞庫（不可更動這些詞的拼字）】\n${glossaryText}\n` : '';
+
+  const systemPrompt = `你是一位繁體中文字幕批次編輯助手，專門處理台灣華語字幕。使用者會給你一份字幕和一個編輯指令，請根據指令找出需要修改的字幕條目。
+
+【語言原則】
+- 本字幕為台灣繁體中文，修改結果須符合台灣用語習慣
+- 除非指令明確要求，否則不要更動台灣慣用詞彙
+- 保持說話者的語氣與口吻
+${glossarySection}
+輸出規則（嚴格遵守）：
+1. 只列出有變動的條目，每條佔一行，格式如下：
+   #編號 [時間碼起點] "目前文字" → "修改後文字"
+2. 不要加任何說明或額外文字
+3. 如果沒有任何條目需要修改，只輸出：無需修改
+
+範例輸出：
+#5 [00:00:12,438] "她很厲害" → "他很厲害"
+#23 [00:01:44,200] "這個它很貴" → "這個它很貴"`;
+
+  const userMessage = `指令：${instruction}\n\n字幕：\n${srtText}`;
+
+  document.getElementById('aiOverlay').style.display = 'flex';
+  document.getElementById('aiStatus').textContent = '套用指令中：「' + instruction.slice(0, 30) + (instruction.length > 30 ? '…' : '') + '」';
+  document.getElementById('aiBtn').disabled = true;
+  document.getElementById('cmdBtn').disabled = true;
+
+  try {
+    const data = await callWithRetry({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+
+    const resultText = (data.content?.[0]?.text || '').trim();
+
+    if (!resultText || resultText === '無需修改') {
+      showToast('✅ 此指令無需修改任何字幕');
+    } else {
+      const suggestions = parseClaudeSuggestions(resultText);
+      if (!suggestions.length) {
+        showToast('⚠️ 無法解析回傳內容，請重試');
+        console.log('Claude output:', resultText);
+      } else {
+        applySuggestions(suggestions, 'AI 分析');
+        document.querySelectorAll('.fc[data-f]').forEach(x => x.classList.remove('on'));
+        document.querySelector('.fc[data-f="edited"]').classList.add('on');
+        curF = 'edited';
+        doFilter();
+        showToast('✅ 指令已套用 ' + suggestions.length + ' 處修改', 3500);
+      }
+    }
+  } catch(e) {
+    showToast('⚠️ ' + e.message, 4000);
+    console.error(e);
+  } finally {
+    document.getElementById('aiOverlay').style.display = 'none';
+    updateAIButton();
+  }
+}
+
+// ── Guidance ───────────────────────────────────────────────────────────
+function openGuidanceModal() {
+  document.getElementById('guidanceTextArea').value = guidanceText;
+  updateGuidanceCharCount();
+  showModal('guidanceModal');
+}
+
+function saveGuidance() {
+  guidanceText = document.getElementById('guidanceTextArea').value.trim();
+  localStorage.setItem('guidance_text', guidanceText);
+  closeModal('guidanceModal');
+  const btn = document.getElementById('guidanceBtn');
+  btn.textContent = guidanceText ? '📄 訪綱 ✓' : '📄 訪綱';
+  btn.classList.toggle('has-content', !!guidanceText);
+  showToast(guidanceText ? '✅ 訪綱已儲存（' + guidanceText.length.toLocaleString() + ' 字）' : '🗑 訪綱已清除');
+}
+
+// ── Glossary ───────────────────────────────────────────────────────────
+function loadGlossary() {
+  const raw = localStorage.getItem('glossary_text') || '';
+  if (!raw.trim()) return '';
+  const protected_terms = [];
+  const corrections = [];
+  raw.split('\n').forEach(line => {
+    line = line.trim();
+    if (!line || line.startsWith('#')) return;
+    if (line.includes('→')) {
+      const [a, b] = line.split('→').map(s => s.trim());
+      if (a && b) corrections.push(`「${a}」應為「${b}」`);
+    } else {
+      protected_terms.push(`「${line}」`);
+    }
+  });
+  const parts = [];
+  if (protected_terms.length)
+    parts.push('以下詞彙拼字正確，絕對不可更改：' + protected_terms.join('、'));
+  if (corrections.length)
+    parts.push('以下為已知固定更正對照：\n' + corrections.map(c => '- ' + c).join('\n'));
+  return parts.join('\n\n');
+}
+
+function openGlossaryModal() {
+  document.getElementById('glossaryTextArea').value = localStorage.getItem('glossary_text') || '';
+  showModal('glossaryModal');
+  setTimeout(() => document.getElementById('glossaryTextArea').focus(), 100);
+}
+
+function saveGlossary() {
+  const val = document.getElementById('glossaryTextArea').value.trim();
+  if (val) localStorage.setItem('glossary_text', val);
+  else localStorage.removeItem('glossary_text');
+  closeModal('glossaryModal');
+  const btn = document.getElementById('glossaryBtn');
+  btn.textContent = val ? '📚 詞庫 ✓' : '📚 詞庫';
+  btn.classList.toggle('has-content', !!val);
+  showToast(val ? '✅ 詞庫已儲存' : '🗑 詞庫已清除');
+}
+
+// ── Modal Helpers ──────────────────────────────────────────────────────
+function showModal(id) {
+  document.getElementById(id).style.display = 'flex';
+}
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.modal-overlay').forEach(o => {
+    o.addEventListener('click', e => { if (e.target === o) o.style.display = 'none'; });
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay').forEach(o => o.style.display = 'none');
+      if (document.getElementById('fnrBar').classList.contains('open')) closeFnr();
+    }
+  });
+});
+
+// ── Claude API ─────────────────────────────────────────────────────────
+async function runAI() {
+  const apiKey = localStorage.getItem('claude_api_key') || '';
+  if (!apiKey) { showToast('⚠️ 請先設定 API Key（點 ⚙️）'); return; }
+  if (!SUBS.length) { showToast('⚠️ 請先匯入字幕'); return; }
+
+  const srtText = SUBS.map(([n, tc, txt]) => n + '\n' + tc + '\n' + txt).join('\n\n');
+
+  const glossaryText = loadGlossary();
+  const glossarySection = glossaryText ? `\n【專案詞庫（絕對不可更動這些詞）】\n${glossaryText}\n\n` : '';
+
+  const systemPrompt = `你是一位專業的繁體中文字幕校對助手，專門處理台灣華語（國語）的訪談與節目字幕。${guidanceText ? '我會給你一份訪綱以及一份 SRT 格式字幕。' : '我會給你一份 SRT 格式字幕。'}
+
+【語言背景】
+- 本字幕為台灣華語（繁體中文），請以台灣用語為標準
+- 保留台灣慣用詞：軟體（非軟件）、影片（非視頻）、網路（非網絡）、資訊（非信息）、捷運（非地鐵）、便利商店（非便利店）、計程車（非出租車）
+- 不要將台灣口語或台式用語改成中國大陸用詞
+- 保留台灣政治、地理、文化詞彙（立法院、監察院、總統府、縣市長、里長、廟宇等）
+
+【常見台灣華語 ASR 同音字錯誤（請特別留意）】
+- 「的」/「得」/「地」混用
+- 「在」/「再」混用
+- 「以」/「已」混用
+- 「做」/「作」混用
+- 「制」/「製」混用（製造 vs 制度）
+- 「里」/「裡」混用（台灣繁體標準為「裡」）
+- 人名姓氏常見誤辨：陳→成、林→鄰、蔡→菜、謝→洩、黃→荒、賴→來
+${glossarySection}你的任務：找出字幕中確實需要修正的錯誤，包括：
+- 人名、地名、機構名、書名等專有名詞的錯字（優先對照訪綱）
+- 上列 ASR 同音字錯誤
+- 明顯的錯別字
+
+【禁止事項】
+- 不要把台灣用語改成中國大陸用語
+- 不要修改說話者的語氣詞、口頭禪、刻意口語表達
+- 不要修改詞庫中列出的專有名詞
+
+輸出規則（嚴格遵守）：
+1. 只列出確實需要修改的條目
+2. 每條佔一行，格式如下：
+   #編號 [時間碼起點] "原始文字" → "修正後文字"
+3. 不要加任何說明、標題或額外文字
+4. 如果字幕完全無誤，只輸出：無需修改
+
+範例輸出：
+#42 [00:03:15,200] "張偉" → "張維"
+#103 [00:08:44,600] "軟件工程師" → "軟體工程師"`;
+
+  const userMessage = guidanceText
+    ? `訪綱內容：\n${guidanceText}\n\n字幕（SRT）：\n${srtText}`
+    : `字幕（SRT）：\n${srtText}`;
+
+  document.getElementById('aiOverlay').style.display = 'flex';
+  document.getElementById('aiStatus').textContent = 'Claude 正在分析 ' + SUBS.length + ' 條字幕…';
+  document.getElementById('aiBtn').disabled = true;
+
+  try {
+    const data = await callWithRetry({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    });
+
+    const resultText = (data.content?.[0]?.text || '').trim();
+
+    if (!resultText || resultText === '無需修改') {
+      showToast('✅ Claude：字幕無需修改');
+    } else {
+      const suggestions = parseClaudeSuggestions(resultText);
+      if (!suggestions.length) {
+        showToast('⚠️ 無法解析 Claude 回傳內容，請重試');
+        console.log('Claude output:', resultText);
+      } else {
+        applySuggestions(suggestions, '指令：' + instruction.slice(0, 16) + (instruction.length > 16 ? '…' : ''));
+        document.querySelectorAll('.fc[data-f]').forEach(x => x.classList.remove('on'));
+        document.querySelector('.fc[data-f="flagged"]').classList.add('on');
+        curF = 'flagged';
+        doFilter();
+        showToast('✨ 已產生 ' + suggestions.length + ' 條修改建議', 3500);
+      }
+    }
+  } catch(e) {
+    showToast('⚠️ ' + e.message, 4000);
+    console.error(e);
+  } finally {
+    document.getElementById('aiOverlay').style.display = 'none';
+    updateAIButton();
+  }
+}
+
+document.getElementById('aiBtn').addEventListener('click', runAI);
+
+// ── API with Retry ─────────────────────────────────────────────────────
+async function callWithRetry(payload, maxRetries = 3) {
+  const apiKey = localStorage.getItem('claude_api_key') || '';
+  for (let i = 0; i < maxRetries; i++) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) return data;
+    if (data.error?.type === 'api_error' && i < maxRetries - 1) {
+      document.getElementById('aiStatus').textContent =
+        `伺服器錯誤，第 ${i + 2} 次重試中…`;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      continue;
+    }
+    if (res.status === 401) throw new Error('API Key 無效，請重新設定');
+    if (res.status === 429) throw new Error('請求過於頻繁，請稍後再試');
+    throw new Error(data.error?.message || 'HTTP ' + res.status);
+  }
+}
+
+function parseClaudeSuggestions(text) {
+  const results = [];
+  // Match: #42 [00:03:15,200] "原文" → "修正"  (handles → and ->)
+  const re = /#(\d+)\s+\[[^\]]*\]\s+"([^"]+)"\s*[→\->]+\s*"([^"]+)"/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const num = parseInt(m[1], 10);
+    const original = m[2];
+    const suggestion = m[3];
+    if (suggestion !== original) results.push({ num, original, suggestion });
+  }
+  return results;
+}
+
+function applySuggestions(suggestions, label) {
+  pushHistory(label || 'AI 修改');
+  let applied = 0;
+  suggestions.forEach(({ num, original, suggestion }) => {
+    // ── 找到正確的目標行 ──────────────────────────────────────────────
+    let targetNum = num;
+    let s = SUBS.find(x => x[0] === num);
+
+    // 驗證：Claude 給的行號對應的文字是否與 original 相符
+    if (s && original) {
+      const currentText = (edits[num] || s[2]).trim();
+      if (currentText !== original.trim()) {
+        // 行號錯誤，改用文字搜尋找到正確的行
+        const match = SUBS.find(x => (edits[x[0]] || x[2]).trim() === original.trim());
+        if (match) {
+          targetNum = match[0];
+          s = match;
+        } else {
+          console.warn(`[applySuggestions] 找不到原文「${original}」，跳過此建議`);
+          return;
+        }
+      }
+    }
+
+    if (!s) return;
+    s[3] = 1;
+    const tr = document.getElementById('tr' + targetNum);
+    if (!tr) return;
+
+    if (!edits[targetNum]) edits[targetNum] = suggestion;
+
+    tr.dataset.flagged = 1;
+    tr.classList.add('flagged');
+
+    const span = document.getElementById('ct' + targetNum);
+    if (span) {
+      span.textContent = edits[targetNum];
+      span.style.color = '#f5a623';
+      span.className = 'cell-text ai-suggest';
+    }
+    const tdO = tr.querySelectorAll('td')[2];
+    if (tdO) tdO.classList.add('changed');
+    const ub = document.getElementById('ub' + targetNum);
+    if (ub) ub.style.display = '';
+    applied++;
+  });
+  if (applied) {
+    updateStats();
+    saveSession();
+  }
+}
+
+// ── Version Management ─────────────────────────────────────────────────
+function openVersionModal() {
+  if (!SUBS.length) { showToast('⚠️ 請先匯入字幕'); return; }
+  // Pre-fill name with filename + timestamp
+  const now = new Date();
+  const ts = now.toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }).replace(/\//g, '/');
+  document.getElementById('versionNameInput').value = currentFilename + ' ' + ts;
+  renderVersionList();
+  showModal('versionModal');
+}
+
+function saveVersion() {
+  const name = document.getElementById('versionNameInput').value.trim();
+  if (!name) { showToast('⚠️ 請輸入版本名稱'); return; }
+  if (!SUBS.length) { showToast('⚠️ 尚未載入字幕'); return; }
+
+  const versions = getVersions();
+  const version = {
+    id: 'v_' + Date.now(),
+    name,
+    savedAt: new Date().toISOString(),
+    filename: currentFilename,
+    editCount: Object.keys(edits).length,
+    edits: { ...edits },          // 只存 edits（輕量）
+    subsSnapshot: SUBS.map(([n, tc, txt, f]) => [n, tc, txt, f]), // 完整快照
+  };
+  versions.unshift(version); // 最新在最上面
+  localStorage.setItem('subtitle_versions', JSON.stringify(versions));
+  currentVersionId = version.id; // 標記目前載入的是這個版本
+  renderVersionList();
+  showToast('✅ 已儲存版本「' + name + '」');
+
+  // Reset input for next save
+  const now = new Date();
+  const ts = now.toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }).replace(/\//g, '/');
+  document.getElementById('versionNameInput').value = currentFilename + ' ' + ts;
+}
+
+function getVersions() {
+  try { return JSON.parse(localStorage.getItem('subtitle_versions') || '[]'); }
+  catch { return []; }
+}
+
+function renderVersionList() {
+  const versions = getVersions();
+  const container = document.getElementById('versionList');
+  if (!versions.length) {
+    container.innerHTML = '<div class="version-empty">尚未儲存任何版本</div>';
+    return;
+  }
+  container.innerHTML = versions.map(v => {
+    const date = new Date(v.savedAt).toLocaleString('zh-TW', {
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+    });
+    return `
+      <div class="version-item ${v.id === currentVersionId ? 'loaded' : ''}">
+        <div class="version-item-info">
+          <div class="version-item-name" title="${v.name}">${v.name}</div>
+          <div class="version-item-meta">${date}｜${v.filename}｜修改 ${v.editCount} 筆</div>
+        </div>
+        <div class="version-item-actions">
+          <button class="version-load-btn ${v.id === currentVersionId ? 'active' : ''}" onclick="loadVersion('${v.id}')">📂 載入</button>
+          <button class="version-dl-btn" onclick="downloadVersion('${v.id}')">⬇ 下載</button>
+          <button class="version-del-btn" onclick="deleteVersion('${v.id}')">刪除</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function downloadVersion(id) {
+  const versions = getVersions();
+  const v = versions.find(x => x.id === id);
+  if (!v) { showToast('⚠️ 找不到此版本'); return; }
+
+  const subs = v.subsSnapshot || SUBS;
+  const content = subs.map(([num, tc, txt]) => {
+    return num + '\n' + tc + '\n' + (v.edits[num] || txt);
+  }).join('\n\n');
+
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = v.name.replace(/[/\\:*?"<>|]/g, '_') + '.srt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('💾 已下載「' + v.name + '.srt」');
+}
+
+function deleteVersion(id) {
+  if (id === currentVersionId) {
+    if (!confirm('這是目前載入中的版本，確定要刪除嗎？')) return;
+    currentVersionId = null;
+  }
+  const versions = getVersions().filter(x => x.id !== id);
+  localStorage.setItem('subtitle_versions', JSON.stringify(versions));
+  renderVersionList();
+  showToast('🗑 版本已刪除');
+}
+
+function loadVersion(id) {
+  const versions = getVersions();
+  const v = versions.find(x => x.id === id);
+  if (!v) { showToast('⚠️ 找不到此版本'); return; }
+  if (!v.subsSnapshot || !v.subsSnapshot.length) { showToast('⚠️ 此版本無字幕資料'); return; }
+
+  // 若目前有未儲存的修改，先提醒
+  const hasUnsaved = Object.keys(edits).length > 0 && id !== currentVersionId;
+  if (hasUnsaved && !confirm(`載入「${v.name}」將取代目前的編輯內容，確定繼續？`)) return;
+
+  // 載入版本資料
+  SUBS = v.subsSnapshot.map(s => [...s]);
+  edits = { ...v.edits };
+  currentFilename = v.filename;
+  currentVersionId = id;
+
+  // 更新 UI
+  document.getElementById('fileInfo').textContent = v.name + ' ｜ ' + SUBS.length + ' 條';
+  rebuildTable();
+  applyEditsToDOM();
+  showTableUI();
+  updateAIButton();
+  saveSession();
+  closeModal('versionModal');
+  renderVersionList();
+  showToast('📂 已載入版本「' + v.name + '」，可繼續編輯', 3000);
+}
+
+// ── Video Panel ────────────────────────────────────────────────────────
+let videoObjectURL = null;
+let currentPlayingRow = null;
+
+function toggleVideoPanel() {
+  const panel = document.getElementById('videoPanel');
+  const area = document.getElementById('contentArea');
+  const btn = document.getElementById('videoBtn');
+  const handle = document.getElementById('videoResizeHandle');
+  const isOpen = panel.style.display !== 'none';
+  if (isOpen) {
+    closeVideoPanel();
+  } else {
+    panel.style.display = 'flex';
+    handle.style.display = '';
+    area.classList.add('has-video');
+    btn.classList.add('has-content');
+    btn.textContent = '🎬 影片 ✓';
+  }
+}
+
+function closeVideoPanel() {
+  const panel = document.getElementById('videoPanel');
+  const area = document.getElementById('contentArea');
+  const btn = document.getElementById('videoBtn');
+  const handle = document.getElementById('videoResizeHandle');
+  panel.style.display = 'none';
+  handle.style.display = 'none';
+  area.classList.remove('has-video');
+  if (!document.getElementById('videoEl').src) {
+    btn.classList.remove('has-content');
+    btn.textContent = '🎬 影片';
+  }
+}
+
+function setupVideoInput() {
+  const fileInput = document.getElementById('videoFile');
+  fileInput.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) loadVideoFile(f);
+    e.target.value = '';
+  });
+
+  // Drag & drop onto video drop area
+  const dropArea = document.getElementById('videoDrop');
+  dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.style.background='rgba(139,124,248,.06)'; });
+  dropArea.addEventListener('dragleave', () => { dropArea.style.background=''; });
+  dropArea.addEventListener('drop', e => {
+    e.preventDefault();
+    dropArea.style.background = '';
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('video/')) loadVideoFile(f);
+    else showToast('⚠️ 請拖入影片檔案');
+  });
+
+  // Time update → highlight current subtitle row
+  const vid = document.getElementById('videoEl');
+  vid.addEventListener('timeupdate', onVideoTimeUpdate);
+}
+
+function loadVideoFile(file) {
+  if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
+  videoObjectURL = URL.createObjectURL(file);
+  const vid = document.getElementById('videoEl');
+  vid.src = videoObjectURL;
+  vid.playbackRate = 1.2; // 預設 1.2x
+  document.getElementById('videoFilename').textContent = file.name;
+  document.getElementById('videoDrop').style.display = 'none';
+  document.getElementById('videoPlayerWrap').style.display = 'flex';
+  // Make sure panel is open
+  const panel = document.getElementById('videoPanel');
+  if (panel.style.display === 'none') toggleVideoPanel();
+  showToast('🎬 影片已載入：' + file.name);
+}
+
+function parseTcToSeconds(tc) {
+  // "00:00:05,338 --> 00:00:06,898"  or just start part
+  const start = tc.split(' --> ')[0].trim();
+  const [hms, ms] = start.split(',');
+  const [h, m, s] = hms.split(':').map(Number);
+  return h * 3600 + m * 60 + s + (parseInt(ms, 10) || 0) / 1000;
+}
+
+function formatSeconds(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  const ms = Math.round((sec % 1) * 1000);
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' +
+    String(s).padStart(2,'0') + ',' + String(ms).padStart(3,'0');
+}
+
+function onVideoTimeUpdate() {
+  const vid = document.getElementById('videoEl');
+  const t = vid.currentTime;
+  document.getElementById('videoTimeDisplay').textContent = formatSeconds(t);
+
+  // Find matching subtitle
+  let matched = null;
+  for (const s of SUBS) {
+    const parts = s[1].split(' --> ');
+    const start = parseTcToSeconds(parts[0]);
+    const end = parseTcToSeconds(parts[1]);
+    if (t >= start && t <= end) { matched = s; break; }
+  }
+
+  // Update current subtitle display
+  const subText = document.getElementById('videoSubText');
+  subText.textContent = matched ? (edits[matched[0]] || matched[2]) : '—';
+
+  // Highlight row
+  if (currentPlayingRow !== (matched ? matched[0] : null)) {
+    if (currentPlayingRow) {
+      const prev = document.getElementById('tr' + currentPlayingRow);
+      if (prev) prev.classList.remove('playing');
+    }
+    if (matched) {
+      const cur = document.getElementById('tr' + matched[0]);
+      if (cur) {
+        cur.classList.add('playing');
+        // Auto-scroll to keep playing row visible
+        cur.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+    currentPlayingRow = matched ? matched[0] : null;
+  }
+}
+
+function setSpeed(rate) {
+  const vid = document.getElementById('videoEl');
+  if (vid) vid.playbackRate = rate;
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.classList.toggle('on', parseFloat(btn.textContent) === rate);
+  });
+}
+
+// Click on subtitle row → jump video to that timecode
+function seekVideoToRow(num) {
+  const vid = document.getElementById('videoEl');
+  if (!vid.src) return;
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  vid.currentTime = parseTcToSeconds(s[1].split(' --> ')[0]);
+  vid.play().catch(() => {});
+}
+
+// ── Export SRT ─────────────────────────────────────────────────────────
+function exportSRT() {
+  if (!SUBS.length) { showToast('⚠️ 尚未載入字幕'); return; }
+  const content = SUBS.map(([num, tc, txt]) => {
+    return num + '\n' + tc + '\n' + (edits[num] || txt);
+  }).join('\n\n');
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (currentFilename || 'subtitle') + '_edited.srt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const editCount = Object.keys(edits).length;
+  showToast('💾 已匯出（含 ' + editCount + ' 處修改）');
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────
+function showToast(msg, duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._tmr);
+  t._tmr = setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ── Find & Replace Setup ───────────────────────────────────────────────
+function setupFnrInputs() {
+  const findEl = document.getElementById('fnrFind');
+  const replaceEl = document.getElementById('fnrReplace');
+
+  // 即時搜尋
+  findEl.addEventListener('input', fnrSearch);
+  document.getElementById('fnrCase').addEventListener('change', fnrSearch);
+  document.getElementById('fnrRegex').addEventListener('change', fnrSearch);
+
+  // Enter → 下一個，Shift+Enter → 上一個
+  findEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); fnrStep(e.shiftKey ? -1 : 1); }
+    if (e.key === 'Escape') { e.preventDefault(); closeFnr(); }
+  });
+  replaceEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); fnrReplaceCurrent(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeFnr(); }
+  });
+}
+
+// ── Find & Replace ─────────────────────────────────────────────────────
+let fnrMatches = [];   // [{num, field:'orig'|'edit', text, index}]
+let fnrCurrent = -1;
+
+function openFnr() {
+  if (!SUBS.length) { showToast('⚠️ 請先匯入字幕'); return; }
+  const bar = document.getElementById('fnrBar');
+  bar.classList.add('open');
+  const inp = document.getElementById('fnrFind');
+  inp.focus();
+  inp.select();
+}
+
+function closeFnr() {
+  document.getElementById('fnrBar').classList.remove('open');
+  fnrClearHighlights();
+  fnrMatches = [];
+  fnrCurrent = -1;
+  document.getElementById('fnrCount').textContent = '';
+}
+
+function fnrGetRegex() {
+  const raw = document.getElementById('fnrFind').value;
+  if (!raw) return null;
+  const isRegex = document.getElementById('fnrRegex').checked;
+  const isCaseSensitive = document.getElementById('fnrCase').checked;
+  try {
+    const flags = isCaseSensitive ? 'g' : 'gi';
+    return new RegExp(isRegex ? raw : raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+  } catch { return null; }
+}
+
+function fnrSearch() {
+  fnrClearHighlights();
+  fnrMatches = [];
+  fnrCurrent = -1;
+  const re = fnrGetRegex();
+  const findEl = document.getElementById('fnrFind');
+  if (!re) {
+    findEl.classList.remove('has-match','no-match');
+    document.getElementById('fnrCount').textContent = '';
+    return;
+  }
+
+  SUBS.forEach(([num,, origText]) => {
+    const editText = edits[num] || null;
+    // Search in effective text (edit if exists, otherwise original)
+    const searchText = editText !== null ? editText : origText;
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(searchText)) !== null) {
+      fnrMatches.push({ num, text: searchText, matchIndex: m.index, matchLen: m[0].length });
+      if (re.lastIndex === m.index) re.lastIndex++; // avoid infinite loop on zero-length match
+    }
+  });
+
+  const count = fnrMatches.length;
+  findEl.classList.toggle('has-match', count > 0);
+  findEl.classList.toggle('no-match', count === 0 && document.getElementById('fnrFind').value.length > 0);
+  document.getElementById('fnrCount').textContent = count > 0 ? `${count} 個符合` : '無符合';
+
+  if (count > 0) {
+    fnrCurrent = 0;
+    fnrScrollToCurrent();
+  }
+}
+
+function fnrClearHighlights() {
+  document.querySelectorAll('.fnr-hl').forEach(el => {
+    const parent = el.parentNode;
+    parent.replaceChild(document.createTextNode(el.textContent), el);
+    parent.normalize();
+  });
+}
+
+function fnrScrollToCurrent() {
+  if (fnrCurrent < 0 || fnrCurrent >= fnrMatches.length) return;
+  const { num } = fnrMatches[fnrCurrent];
+  const tr = document.getElementById('tr' + num);
+  if (tr) {
+    tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    // Flash highlight
+    tr.style.outline = '1px solid #ffc107';
+    setTimeout(() => { tr.style.outline = ''; }, 700);
+  }
+  // Update count display
+  document.getElementById('fnrCount').textContent =
+    `${fnrCurrent + 1} / ${fnrMatches.length}`;
+}
+
+function fnrStep(dir) {
+  if (!fnrMatches.length) { fnrSearch(); return; }
+  fnrCurrent = (fnrCurrent + dir + fnrMatches.length) % fnrMatches.length;
+  fnrScrollToCurrent();
+}
+
+function fnrReplaceCurrent() {
+  if (!fnrMatches.length) { fnrSearch(); return; }
+  if (fnrCurrent < 0) fnrCurrent = 0;
+  const re = fnrGetRegex();
+  if (!re) return;
+  const replaceVal = document.getElementById('fnrReplace').value;
+  const { num } = fnrMatches[fnrCurrent];
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  const currentText = edits[num] || s[2];
+  re.lastIndex = 0;
+  let count = 0;
+  const newText = currentText.replace(re, () => { count++; return count === (fnrCurrent >= 0 ? 1 : 1) ? replaceVal : arguments[0]; });
+  // Replace just the first match in this specific entry by doing a targeted replace
+  const singleRe = new RegExp(re.source, re.flags.replace('g',''));
+  const replaced = currentText.replace(singleRe, replaceVal);
+  if (replaced !== currentText) {
+    edits[num] = replaced;
+    refreshRowDisplay(num);
+    saveSession();
+    updateStats();
+  }
+  fnrSearch(); // refresh matches
+}
+
+function fnrReplaceAll() {
+  const re = fnrGetRegex();
+  if (!re) return;
+  if (!fnrMatches.length) { fnrSearch(); if (!fnrMatches.length) return; }
+  const replaceVal = document.getElementById('fnrReplace').value;
+  let changed = 0;
+
+  // Collect unique nums that have matches
+  const affectedNums = [...new Set(fnrMatches.map(m => m.num))];
+  affectedNums.forEach(num => {
+    const s = SUBS.find(x => x[0] === num);
+    if (!s) return;
+    const currentText = edits[num] || s[2];
+    re.lastIndex = 0;
+    const newText = currentText.replace(re, replaceVal);
+    if (newText !== currentText) {
+      edits[num] = newText;
+      refreshRowDisplay(num);
+      changed++;
+    }
+  });
+
+  saveSession();
+  updateStats();
+  fnrSearch(); // refresh (should show 0 matches now)
+  showToast(`✅ 已取代 ${changed} 條字幕`, 3000);
+}
+
+function refreshRowDisplay(num) {
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  const span = document.getElementById('ct' + num);
+  const tr = document.getElementById('tr' + num);
+  const val = edits[num];
+  if (!val || val === s[2]) {
+    delete edits[num];
+    if (span) { span.textContent = '（點此編輯）'; span.className = 'cell-text empty'; span.style.color = ''; }
+    if (tr) { tr.classList.remove('edited'); if (s[3]) tr.classList.add('flagged'); tr.querySelectorAll('td')[2]?.classList.remove('changed'); }
+    const ub = document.getElementById('ub' + num);
+    if (ub) ub.style.display = 'none';
+  } else {
+    if (span) { span.textContent = val; span.className = 'cell-text'; span.style.color = '#2ecc71'; }
+    if (tr) { tr.classList.remove('flagged'); tr.classList.add('edited'); tr.querySelectorAll('td')[2]?.classList.add('changed'); }
+    const ub = document.getElementById('ub' + num);
+    if (ub) ub.style.display = '';
+  }
+}
+
+// ── Keyboard Shortcuts ─────────────────────────────────────────────────
+function isTyping() {
+  const tag = document.activeElement?.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA';
+}
+
+function setupVideoPanelResize() {
+  const handle = document.getElementById('videoResizeHandle');
+  const panel = document.getElementById('videoPanel');
+  let startX, startW;
+
+  handle.addEventListener('mousedown', e => {
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = e => {
+      const delta = startX - e.clientX; // drag left = wider
+      const newW = Math.min(700, Math.max(220, startW + delta));
+      panel.style.width = newW + 'px';
+    };
+    const onUp = () => {
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function setupKeyboardShortcuts() {
+  let kbdBarVisible = false;
+
+  document.addEventListener('keydown', e => {
+    // ? → toggle shortcut hint bar
+    if (e.key === '?' && !isTyping()) {
+      kbdBarVisible = !kbdBarVisible;
+      document.getElementById('kbdBar').classList.toggle('visible', kbdBarVisible);
+      return;
+    }
+
+    // ── Cmd+F → 開啟 Find & Replace ──────────────────────────────
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      openFnr();
+      return;
+    }
+
+    // ── Cmd+Z → Undo ──────────────────────────────────────────────
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      undoHistory();
+      return;
+    }
+
+    // ── Cmd+S → 快速儲存版本 ──────────────────────────────────────
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      e.preventDefault();
+      if (!SUBS.length) { showToast('⚠️ 尚未載入字幕'); return; }
+      const now = new Date();
+      const ts = now.toLocaleString('zh-TW', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const name = currentFilename + ' ' + ts;
+      const versions = getVersions();
+      const version = {
+        id: 'v_' + Date.now(), name, savedAt: now.toISOString(),
+        filename: currentFilename, editCount: Object.keys(edits).length,
+        edits: { ...edits },
+        subsSnapshot: SUBS.map(s => [...s]),
+      };
+      versions.unshift(version);
+      localStorage.setItem('subtitle_versions', JSON.stringify(versions));
+      currentVersionId = version.id;
+      showToast('💾 版本已儲存：' + name);
+      return;
+    }
+
+    // 以下快捷鍵：編輯中不觸發
+    if (isTyping()) return;
+
+    const vid = document.getElementById('videoEl');
+    const hasVideo = vid && vid.src;
+
+    // ── Space → 播放 / 暫停 ───────────────────────────────────────
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (!hasVideo) { showToast('⚠️ 尚未載入影片'); return; }
+      vid.paused ? vid.play() : vid.pause();
+      return;
+    }
+
+    // ── ← / → → 跳退 / 跳進 ─────────────────────────────────────
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (!hasVideo) return;
+      const delta = e.shiftKey ? 30 : 5;
+      vid.currentTime = Math.max(0, vid.currentTime + (e.key === 'ArrowLeft' ? -delta : delta));
+      showToast((e.key === 'ArrowLeft' ? '⏪' : '⏩') + ' ' + (e.shiftKey ? '30' : '5') + '秒', 800);
+      return;
+    }
+
+    // ── Tab / Shift+Tab → 跳到下一條 / 上一條字幕 ────────────────
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      jumpToAdjacentSubtitle(e.shiftKey ? -1 : 1);
+      return;
+    }
+  });
+}
+
+function jumpToAdjacentSubtitle(direction) {
+  if (!SUBS.length) return;
+
+  // 找出目前畫面中可見的行（根據 filter）
+  const visibleRows = SUBS
+    .map(s => s[0])
+    .filter(num => {
+      const tr = document.getElementById('tr' + num);
+      return tr && tr.style.display !== 'none';
+    });
+
+  if (!visibleRows.length) return;
+
+  // 找目前高亮（playing）或選中的行
+  let currentIdx = -1;
+  if (currentPlayingRow) {
+    currentIdx = visibleRows.indexOf(currentPlayingRow);
+  }
+  // 如果沒有播放中的行，找目前正在編輯的行
+  if (currentIdx === -1) {
+    const activeTextarea = document.querySelector('#tbody textarea');
+    if (activeTextarea) {
+      const tr = activeTextarea.closest('tr');
+      if (tr) currentIdx = visibleRows.indexOf(parseInt(tr.dataset.num, 10));
+    }
+  }
+
+  const nextIdx = currentIdx === -1
+    ? (direction === 1 ? 0 : visibleRows.length - 1)
+    : Math.max(0, Math.min(visibleRows.length - 1, currentIdx + direction));
+
+  const targetNum = visibleRows[nextIdx];
+  const tr = document.getElementById('tr' + targetNum);
+  if (!tr) return;
+
+  // 捲動到該行
+  tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  // 若影片有載入，跳轉時間碼
+  seekVideoToRow(targetNum);
+
+  // 高亮閃爍提示
+  tr.style.outline = '2px solid #8b7cf8';
+  setTimeout(() => { tr.style.outline = ''; }, 600);
+}
+
+// ── Core Table Functions (preserved from original) ─────────────────────
+function buildTable() {
+  const tb = document.getElementById('tbody');
+  const frag = document.createDocumentFragment();
+  SUBS.forEach(s => {
+    const [num, tc, text, flagged] = s;
+    const tr = document.createElement('tr');
+    tr.id = 'tr' + num;
+    tr.dataset.num = num;
+    tr.dataset.flagged = flagged;
+    tr.dataset.text = text.toLowerCase();
+    if (flagged) tr.classList.add('flagged');
+
+    const tdN = document.createElement('td');
+    tdN.className = 'num'; tdN.textContent = '#' + num;
+    tdN.title = '點擊跳轉影片'; tdN.style.cursor = 'pointer';
+    tdN.onclick = () => seekVideoToRow(num);
+    const insertBtn = document.createElement('button');
+    insertBtn.className = 'insert-btn';
+    insertBtn.textContent = '＋';
+    insertBtn.title = '在此行後方插入新字幕';
+    insertBtn.onclick = e => { e.stopPropagation(); openInsertModal(num); };
+    tdN.appendChild(insertBtn);
+
+    const tdT = document.createElement('td');
+    tdT.className = 'tc'; tdT.textContent = tc.split(' --> ')[0];
+    tdT.title = '點擊跳轉影片'; tdT.style.cursor = 'pointer';
+    tdT.onclick = () => seekVideoToRow(num);
+    const delBtn = document.createElement('button');
+    delBtn.className = 'delete-row-btn';
+    delBtn.textContent = '刪除';
+    delBtn.title = '刪除此字幕條目';
+    delBtn.onclick = e => { e.stopPropagation(); deleteSubtitle(num); };
+    tdT.appendChild(delBtn);
+
+    const tdO = document.createElement('td');
+    tdO.className = 'orig'; tdO.textContent = text;
+    tdO.title = '點擊跳轉影片'; tdO.style.cursor = 'pointer';
+    tdO.onclick = () => seekVideoToRow(num);
+
+    const tdE = document.createElement('td');
+    tdE.className = 'edit-cell';
+    const span = document.createElement('span');
+    span.className = 'cell-text empty';
+    span.id = 'ct' + num;
+    span.textContent = '（點此編輯）';
+    span.onclick = () => startEdit(num);
+    const undoBtn = document.createElement('button');
+    undoBtn.className = 'undo-btn';
+    undoBtn.textContent = '撤銷';
+    undoBtn.onclick = e => { e.stopPropagation(); undoEdit(num); };
+    undoBtn.id = 'ub' + num;
+    undoBtn.style.display = 'none';
+    tdE.appendChild(span);
+    tdE.appendChild(undoBtn);
+
+    tr.appendChild(tdN);
+    tr.appendChild(tdT);
+    tr.appendChild(tdO);
+    tr.appendChild(tdE);
+    frag.appendChild(tr);
+  });
+  tb.appendChild(frag);
+}
+
+function startEdit(num) {
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  const span = document.getElementById('ct' + num);
+  if (!span) return;
+  const cur = edits[num] != null ? edits[num] : s[2];
+  const inp = document.createElement('textarea');
+  inp.className = 'cell-input';
+  inp.rows = 1;
+  inp.value = cur;
+  inp.placeholder = s[2];
+  inp.onblur = () => commitEdit(num, inp.value);
+  inp.onkeydown = e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') { inp.value = edits[num] != null ? edits[num] : s[2]; inp.blur(); }
+  };
+  inp.oninput = () => { inp.style.height = 'auto'; inp.style.height = inp.scrollHeight + 'px'; };
+  span.parentNode.replaceChild(inp, span);
+  inp.focus();
+  inp.select();
+}
+
+function commitEdit(num, val) {
+  const s = SUBS.find(x => x[0] === num);
+  const trimmed = val.trim();
+  const prev = edits[num] != null ? edits[num] : s?.[2];
+  if (trimmed === prev) { /* 沒變動，不存歷史 */ } else { pushHistory('編輯 #' + num); }
+  const inp = document.querySelector('#tr' + num + ' textarea');
+  const span = document.createElement('span');
+  span.className = 'cell-text';
+  span.id = 'ct' + num;
+
+  if (trimmed && trimmed !== s[2]) {
+    edits[num] = trimmed;
+    span.textContent = trimmed;
+    span.style.color = '#2ecc71';
+    const tr = document.getElementById('tr' + num);
+    tr.classList.remove('flagged');
+    tr.classList.add('edited');
+    const tdO = tr.querySelectorAll('td')[2];
+    tdO.classList.add('changed');
+    const ub = document.getElementById('ub' + num);
+    if (ub) ub.style.display = '';
+  } else {
+    if (trimmed === '' || trimmed === s[2]) delete edits[num];
+    span.textContent = '（點此編輯）';
+    span.className = 'cell-text empty';
+    const tr = document.getElementById('tr' + num);
+    tr.classList.remove('edited');
+    if (s[3]) tr.classList.add('flagged');
+    const tdO = tr.querySelectorAll('td')[2];
+    tdO.classList.remove('changed');
+    const ub = document.getElementById('ub' + num);
+    if (ub) ub.style.display = 'none';
+  }
+  span.onclick = () => startEdit(num);
+  if (inp) inp.parentNode.replaceChild(span, inp);
+  updateStats();
+  saveSession();
+}
+
+// ── Insert Subtitle ────────────────────────────────────────────────────
+let insertAfterNum = null;
+
+function openInsertModal(afterNum) {
+  insertAfterNum = afterNum;
+  const idx = SUBS.findIndex(x => x[0] === afterNum);
+  const cur = SUBS[idx];
+  const next = SUBS[idx + 1];
+
+  // Default start = end of current row
+  const curEnd = cur[1].split(' --> ')[1]?.trim() || '';
+  // Default end = start of next row, or current end + 2s
+  let defaultEnd = '';
+  if (next) {
+    defaultEnd = next[1].split(' --> ')[0].trim();
+  } else {
+    defaultEnd = formatSeconds(parseTcToSeconds(curEnd) + 2);
+  }
+
+  document.getElementById('insertStart').value = curEnd;
+  document.getElementById('insertEnd').value = defaultEnd;
+  document.getElementById('insertText').value = '';
+  document.getElementById('insertModalNote').textContent =
+    '插入在第 #' + afterNum + ' 條之後';
+  showModal('insertModal');
+  setTimeout(() => document.getElementById('insertText').focus(), 100);
+}
+
+function confirmInsertSubtitle() {
+  const start = document.getElementById('insertStart').value.trim();
+  const end = document.getElementById('insertEnd').value.trim();
+  const text = document.getElementById('insertText').value.trim();
+  const tcRe = /^\d{2}:\d{2}:\d{2},\d{3}$/;
+  if (!tcRe.test(start) || !tcRe.test(end)) {
+    showToast('⚠️ 時間碼格式需為 00:00:00,000'); return;
+  }
+  if (!text) { showToast('⚠️ 請輸入字幕文字'); return; }
+
+  pushHistory('插入 #' + (insertAfterNum + 1));
+  const tc = start + ' --> ' + end;
+  const idx = SUBS.findIndex(x => x[0] === insertAfterNum);
+
+  // 後面所有條目編號 +1
+  const newEdits = {};
+  for (const [k, v] of Object.entries(edits)) {
+    const n = parseInt(k, 10);
+    newEdits[n > insertAfterNum ? n + 1 : n] = v;
+  }
+  edits = newEdits;
+  SUBS.forEach(s => { if (s[0] > insertAfterNum) s[0]++; });
+
+  // 插入新條目
+  const newNum = insertAfterNum + 1;
+  SUBS.splice(idx + 1, 0, [newNum, tc, text, 0]);
+
+  closeModal('insertModal');
+  rebuildTable();
+  applyEditsToDOM();
+  saveSession();
+  showToast('✅ 已在 #' + insertAfterNum + ' 後插入新字幕');
+
+  // 捲動到新行
+  setTimeout(() => {
+    const newTr = document.getElementById('tr' + newNum);
+    if (newTr) newTr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 100);
+}
+
+function deleteSubtitle(num) {
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  const preview = s[2].length > 20 ? s[2].slice(0, 20) + '…' : s[2];
+  if (!confirm('確定要刪除第 #' + num + ' 條字幕？\n「' + preview + '」')) return;
+
+  pushHistory('刪除 #' + num);
+  // 移除條目與對應編輯
+  SUBS = SUBS.filter(x => x[0] !== num);
+  delete edits[num];
+
+  // 後面條目重新編號
+  const newEdits = {};
+  for (const [k, v] of Object.entries(edits)) {
+    const n = parseInt(k, 10);
+    newEdits[n > num ? n - 1 : n] = v;
+  }
+  edits = newEdits;
+  SUBS.forEach(s => { if (s[0] > num) s[0]--; });
+
+  rebuildTable();
+  applyEditsToDOM();
+  saveSession();
+  showToast('🗑️ 已刪除第 #' + num + ' 條字幕');
+}
+
+function undoEdit(num) {
+  pushHistory('撤銷編輯 #' + num);
+  delete edits[num];
+  const s = SUBS.find(x => x[0] === num);
+  const span = document.getElementById('ct' + num);
+  if (span) {
+    span.textContent = '（點此編輯）';
+    span.style.color = '';
+    span.className = 'cell-text empty';
+    span.onclick = () => startEdit(num);
+  }
+  const tr = document.getElementById('tr' + num);
+  if (tr) {
+    tr.classList.remove('edited');
+    if (s && s[3]) tr.classList.add('flagged');
+    const tdO = tr.querySelectorAll('td')[2];
+    if (tdO) tdO.classList.remove('changed');
+  }
+  const ub = document.getElementById('ub' + num);
+  if (ub) ub.style.display = 'none';
+  updateStats();
+  saveSession();
+}
+
+function setupFilterBtns() {
+  document.querySelectorAll('.fc[data-f]').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.fc[data-f]').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      curF = b.dataset.f;
+      doFilter();
+    });
+  });
+}
+
+function doFilter() {
+  curQ = (document.getElementById('search').value || '').toLowerCase().trim();
+  let show = 0;
+  SUBS.forEach(s => {
+    const [num,, text, flagged] = s;
+    const tr = document.getElementById('tr' + num);
+    if (!tr) return;
+    const ed = edits[num];
+    let ok = true;
+    if (curQ) {
+      const h = text.toLowerCase() + ' ' + (ed || '') + ' ' + num;
+      if (!h.includes(curQ)) ok = false;
+    }
+    if (ok) switch (curF) {
+      case 'flagged': ok = flagged === 1; break;
+      case 'edited':  ok = !!ed; break;
+      case 'pending': ok = flagged === 1 && !ed; break;
+    }
+    tr.style.display = ok ? '' : 'none';
+    if (ok) show++;
+  });
+  document.getElementById('info').textContent = show + ' 條';
+  updateStats();
+}
+
+function updateStats() {
+  const n = Object.keys(edits).length;
+  document.getElementById('binfo').textContent = n > 0 ? '已修改 ' + n + ' 筆' : '尚無修改';
+}
+
+function doCopy() {
+  const changed = Object.entries(edits).sort((a, b) => +a[0] - +b[0]);
+  if (!changed.length) { showToast('⚠️ 尚未做任何修改！'); return; }
+  const NL = '\n';
+  let txt = '【字幕修改清單】' + currentFilename + NL;
+  txt += '共修改 ' + changed.length + ' 處' + NL + '─'.repeat(30) + NL + NL;
+  txt += '✅ 確認修改：' + NL;
+  changed.forEach(([num, v]) => {
+    const s = SUBS.find(x => x[0] === +num);
+    txt += '  #' + num + ' [' + (s ? s[1].split(' --> ')[0] : '') + '] ' + JSON.stringify(s ? s[2] : '') + ' → ' + JSON.stringify(v) + NL;
+  });
+
+  const showOk = () => {
+    const btn = document.getElementById('copybtn');
+    btn.textContent = '✅ 已複製！';
+    btn.classList.add('ok');
+    showToast('✅ 已複製！請貼到對話框');
+    setTimeout(() => { btn.textContent = '📋 複製給 Claude'; btn.classList.remove('ok'); }, 3000);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(showOk).catch(() => fallbackCopy(txt));
+  } else {
+    fallbackCopy(txt);
+  }
+}
+
+function fallbackCopy(txt) {
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try {
+    if (document.execCommand('copy')) showToast('✅ 已複製！');
+    else prompt('請手動全選複製（Cmd+A → Cmd+C）：', txt);
+  } catch(e) {
+    prompt('請手動全選複製（Cmd+A → Cmd+C）：', txt);
+  }
+  document.body.removeChild(ta);
+}
+</script>
+</body>
+</html>
