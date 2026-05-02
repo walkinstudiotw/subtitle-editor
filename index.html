@@ -1205,7 +1205,10 @@ async function runCommand() {
     return;
   }
 
-  dlog('info', 'CMD', `指令（AI）：${instruction.slice(0,40)}`, `字幕數：${SUBS.length}`);
+  const cmdTotalBatches = Math.ceil(SUBS.length / BATCH_SIZE);
+  const cmdIsBatch = cmdTotalBatches > 1;
+  dlog('info', 'CMD', `指令（AI）：${instruction.slice(0,40)}`, `字幕數：${SUBS.length}，批次數：${cmdTotalBatches}`);
+
   // ── 本地無法處理，走 Claude API ────────────────────────────────────
   const apiKey = localStorage.getItem('claude_api_key') || '';
   if (!apiKey) { showToast('⚠️ 請先設定 API Key（點 ⚙️）'); return; }
@@ -1214,12 +1217,6 @@ async function runCommand() {
   saveCmdToHistory(instruction);
   document.getElementById('commandText').value = '';
   closeModal('commandModal');
-
-  // Use current effective text (edited > original)
-  const srtText = SUBS.map(([n, tc, txt]) => {
-    const cur = edits[n] || txt;
-    return n + '\n' + tc + '\n' + cur;
-  }).join('\n\n');
 
   const glossaryText = loadGlossary();
   const glossarySection = glossaryText ? `\n【專案詞庫（不可更動這些詞的拼字）】\n${glossaryText}\n` : '';
@@ -1241,40 +1238,68 @@ ${glossarySection}
 #5 [00:00:12,438] "她很厲害" → "他很厲害"
 #23 [00:01:44,200] "這個它很貴" → "這個它很貴"`;
 
-  const userMessage = `指令：${instruction}\n\n字幕：\n${srtText}`;
-
+  const instrLabel = instruction.slice(0, 30) + (instruction.length > 30 ? '…' : '');
   document.getElementById('aiOverlay').style.display = 'flex';
-  document.getElementById('aiStatus').textContent = '套用指令中：「' + instruction.slice(0, 30) + (instruction.length > 30 ? '…' : '') + '」';
   document.getElementById('aiBtn').disabled = true;
   document.getElementById('cmdBtn').disabled = true;
 
   try {
-    const data = await callWithRetry({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    });
+    let allSuggestions = [];
 
-    const resultText = (data.content?.[0]?.text || '').trim();
+    for (let b = 0; b < cmdTotalBatches; b++) {
+      const batchSubs = SUBS.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+      const firstNum = batchSubs[0][0];
+      const lastNum  = batchSubs[batchSubs.length - 1][0];
 
-    if (!resultText || resultText === '無需修改') {
-      showToast('✅ 此指令無需修改任何字幕');
-    } else {
-      const suggestions = parseClaudeSuggestions(resultText);
-      if (!suggestions.length) {
-        showToast('⚠️ 無法解析回傳內容，請重試');
-        console.log('Claude output:', resultText);
+      // 使用目前有效文字（已編輯 > 原始）
+      const batchSRT = batchSubs.map(([n, tc, txt]) => {
+        const cur = edits[n] != null ? edits[n] : txt;
+        return n + '\n' + tc + '\n' + cur;
+      }).join('\n\n');
+
+      document.getElementById('aiStatus').textContent = cmdIsBatch
+        ? `套用指令 第 ${b + 1}／${cmdTotalBatches} 批（#${firstNum}–#${lastNum}）｜「${instrLabel}」`
+        : `套用指令中：「${instrLabel}」`;
+      dlog('info', 'CMD', `批次 ${b+1}／${cmdTotalBatches}，字幕 #${firstNum}–#${lastNum}`);
+
+      const userMessage = `指令：${instruction}\n\n字幕：\n${batchSRT}`;
+
+      const data = await callWithRetry({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      });
+
+      const resultText = (data.content?.[0]?.text || '').trim();
+
+      if (resultText && resultText !== '無需修改') {
+        const batchSuggestions = parseClaudeSuggestions(resultText);
+        dlog('ok', 'CMD', `批次 ${b+1} 完成：${batchSuggestions.length} 條修改`);
+        allSuggestions = allSuggestions.concat(batchSuggestions);
       } else {
-        applySuggestions(suggestions, 'AI 分析');
-        document.querySelectorAll('.fc[data-f]').forEach(x => x.classList.remove('on'));
-        document.querySelector('.fc[data-f="edited"]').classList.add('on');
-        curF = 'edited';
-        doFilter();
-        showToast('✅ 指令已套用 ' + suggestions.length + ' 處修改', 3500);
+        dlog('ok', 'CMD', `批次 ${b+1} 完成：無需修改`);
+      }
+
+      if (b < cmdTotalBatches - 1) {
+        await new Promise(r => setTimeout(r, 600));
       }
     }
+
+    // ── 所有批次完成，一次套用 ──────────────────────────────────────
+    if (!allSuggestions.length) {
+      showToast('✅ 此指令無需修改任何字幕');
+    } else {
+      applySuggestions(allSuggestions, `指令：${instruction.slice(0,20)}`);
+      document.querySelectorAll('.fc[data-f]').forEach(x => x.classList.remove('on'));
+      document.querySelector('.fc[data-f="edited"]').classList.add('on');
+      curF = 'edited';
+      doFilter();
+      const batchNote = cmdIsBatch ? `（共 ${cmdTotalBatches} 批）` : '';
+      showToast(`✅ 指令已套用 ${allSuggestions.length} 處修改${batchNote}`, 3500);
+    }
   } catch(e) {
+    dlog('error', 'CMD', `指令執行失敗：${e.message}`);
     showToast('⚠️ ' + e.message, 4000);
     console.error(e);
   } finally {
