@@ -246,6 +246,19 @@ td.tc.tc-active{background:rgba(61,214,200,.07) !important}
 td.tc.edited-tc{color:#2ecc71}
 td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6}
 
+/* ── Memory Modal table ── */
+.mem-table{width:100%;border-collapse:collapse;font-size:.78rem;margin-top:6px}
+.mem-table th{background:#1a1a2e;color:#666;font-weight:600;padding:5px 10px;text-align:left;border-bottom:1px solid #222;font-size:.68rem;text-transform:uppercase;letter-spacing:.3px}
+.mem-table td{padding:5px 10px;border-bottom:1px solid #1a1a1a;vertical-align:middle}
+.mem-table tr:hover td{background:#161620}
+.mem-from{color:#bbb}
+.mem-to{color:#2ecc71;font-weight:600}
+.mem-count{color:#8b7cf8;font-size:.72rem;text-align:right;width:54px}
+.mem-del{background:none;border:none;color:#444;cursor:pointer;font-size:.8rem;padding:0 4px;line-height:1}
+.mem-del:hover{color:#e74c3c}
+.mem-import-label{padding:6px 18px;border-radius:7px;border:none;cursor:pointer;font-size:.82rem;font-family:inherit;transition:all .15s;background:#2a2a3a;color:#a99cf8}
+.mem-import-label:hover{background:#3a3a5a}
+
 /* AI overlay */
 .ai-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:2000;gap:16px}
 .ai-spinner{width:44px;height:44px;border:3px solid #2a2a2a;border-top-color:#8b7cf8;border-radius:50%;animation:spin .8s linear infinite}
@@ -415,6 +428,30 @@ td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6
   </div>
 </div>
 
+<!-- Correction Memory Modal -->
+<div class="modal-overlay" id="memoryModal">
+  <div class="modal modal-lg">
+    <div class="modal-title">🧠 校對記憶</div>
+    <div class="modal-note" id="memoryStats">載入中…</div>
+    <div style="max-height:340px;overflow-y:auto;margin:8px 0" id="memoryListWrap">
+      <table class="mem-table"><thead><tr>
+        <th>原始</th><th>修正後</th><th style="text-align:right">次數</th><th></th>
+      </tr></thead>
+      <tbody id="memoryTbody"></tbody></table>
+    </div>
+    <div class="modal-btns" style="justify-content:space-between;align-items:center">
+      <div style="display:flex;gap:6px">
+        <button class="btn-primary" onclick="exportMemory()" title="匯出為 .json 檔，換電腦可重新匯入">💾 匯出</button>
+        <label class="mem-import-label" title="匯入之前匯出的 .json 檔，與現有記憶合併">
+          📂 匯入<input type="file" accept=".json" style="display:none" onchange="importMemory(this)">
+        </label>
+        <button class="btn-cancel" style="color:#e74c3c" onclick="clearMemory()">🗑 清除全部</button>
+      </div>
+      <button class="btn-cancel" onclick="closeModal('memoryModal')">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- Insert Subtitle Modal -->
 <div class="modal-overlay" id="insertModal">
   <div class="modal" style="max-width:420px">
@@ -450,6 +487,7 @@ td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6
     <input type="file" id="srtFile" accept=".srt,.vtt,.sbv" style="display:none">
     <button class="action-btn" id="guidanceBtn" onclick="openGuidanceModal()">📄 訪綱</button>
     <button class="action-btn" id="glossaryBtn" onclick="openGlossaryModal()">📚 詞庫</button>
+    <button class="action-btn" id="memoryBtn" onclick="openMemoryModal()" title="查看、匯出、匯入校對記憶">🧠 記憶</button>
     <button class="action-btn ai-btn" id="aiBtn" disabled title="請先匯入字幕並設定 API Key">✨ AI 分析</button>
     <button class="action-btn" id="searchEnhBtn" onclick="toggleSearchEnhanced()" title="⚠️ 注意：啟用後每次 AI 分析費用會增加，分析時間也會拉長 10–20 秒。建議僅在訪綱含有較多需要查證的專有名詞時開啟。">🔍 搜尋增強</button>
     <button class="action-btn" id="cmdBtn" disabled title="請先匯入字幕並設定 API Key" onclick="openCommandModal()">📝 指令</button>
@@ -783,6 +821,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
   _dlogLoadFromStorage();
   dlog('info', 'INIT', '頁面載入', `已從 localStorage 還原 ${debugLogs.length - 1} 筆舊日誌`);
+  _loadMemory();
+  _refreshMemoryBtn();
 
   loadSession();
   updateAIButton();
@@ -1308,6 +1348,7 @@ async function runCommand() {
 
   const glossaryText = loadGlossary();
   const glossarySection = glossaryText ? `\n【專案詞庫（不可更動這些詞的拼字）】\n${glossaryText}\n` : '';
+  const memorySection = getCorrectionPromptSection();
 
   const systemPrompt = `你是一位繁體中文字幕批次編輯助手，專門處理台灣華語字幕。使用者會給你一份字幕和一個編輯指令，請根據指令找出需要修改的字幕條目。
 
@@ -1315,7 +1356,7 @@ async function runCommand() {
 - 本字幕為台灣繁體中文，修改結果須符合台灣用語習慣
 - 除非指令明確要求，否則不要更動台灣慣用詞彙
 - 保持說話者的語氣與口吻
-${glossarySection}
+${glossarySection}${memorySection}
 輸出規則（嚴格遵守）：
 1. 只列出有變動的條目，每條佔一行，格式如下：
    #編號 [時間碼起點] "目前文字" → "修改後文字"
@@ -1454,6 +1495,131 @@ function saveGlossary() {
   showToast(val ? '✅ 詞庫已儲存' : '🗑 詞庫已清除');
 }
 
+// ── Correction Memory ──────────────────────────────────────────────────
+let correctionMemory = { pairs: [] }; // { from, to, count, updatedAt }
+
+function _loadMemory() {
+  try {
+    const raw = localStorage.getItem('correction_memory');
+    if (raw) correctionMemory = JSON.parse(raw);
+    if (!correctionMemory.pairs) correctionMemory = { pairs: [] };
+  } catch(e) { correctionMemory = { pairs: [] }; }
+}
+function _saveMemory() {
+  try { localStorage.setItem('correction_memory', JSON.stringify(correctionMemory)); } catch(e) {}
+  _refreshMemoryBtn();
+}
+function _refreshMemoryBtn() {
+  const btn = document.getElementById('memoryBtn');
+  if (!btn) return;
+  const n = correctionMemory.pairs.length;
+  btn.textContent = n ? `🧠 記憶 (${n})` : '🧠 記憶';
+  btn.classList.toggle('has-content', n > 0);
+}
+
+function recordCorrection(originalText, correctedText) {
+  const from = (originalText || '').trim();
+  const to   = (correctedText || '').trim();
+  if (!from || !to || from === to) return;
+  if (from.length > 60 || to.length > 60) return; // 太長的句子跳過，太過特定
+  const existing = correctionMemory.pairs.find(p => p.from === from && p.to === to);
+  if (existing) {
+    existing.count++;
+    existing.updatedAt = new Date().toISOString().slice(0,10);
+  } else {
+    correctionMemory.pairs.push({ from, to, count: 1, updatedAt: new Date().toISOString().slice(0,10) });
+  }
+  _saveMemory();
+  dlog('ok', 'MEM', `記錄校正：「${from}」→「${to}」`);
+}
+
+function getCorrectionPromptSection() {
+  const pairs = correctionMemory.pairs;
+  if (!pairs.length) return '';
+  const sorted = [...pairs].sort((a, b) => b.count - a.count).slice(0, 30);
+  const lines = sorted.map(p =>
+    p.count >= 2
+      ? `「${p.from}」→「${p.to}」（你已校正 ${p.count} 次）`
+      : `「${p.from}」→「${p.to}」`
+  );
+  return `\n【你的校對習慣（請優先參考，除非訪綱有明確不同指示）】\n${lines.join('\n')}\n`;
+}
+
+function openMemoryModal() {
+  const pairs = [...correctionMemory.pairs].sort((a, b) => b.count - a.count);
+  const stats = document.getElementById('memoryStats');
+  const tbody = document.getElementById('memoryTbody');
+  stats.textContent = pairs.length
+    ? `已學習 ${pairs.length} 組校正對照，累計記錄 ${pairs.reduce((s,p)=>s+p.count,0)} 次修改`
+    : '尚無校正記憶。每次在工具中儲存修改後，會自動記錄。';
+  tbody.innerHTML = '';
+  pairs.forEach((p, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mem-from">${p.from}</td>
+      <td class="mem-to">${p.to}</td>
+      <td class="mem-count">${p.count} 次</td>
+      <td><button class="mem-del" onclick="deleteMemoryPair(${i})" title="刪除此條">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+  showModal('memoryModal');
+}
+
+function deleteMemoryPair(sortedIndex) {
+  const sorted = [...correctionMemory.pairs].sort((a, b) => b.count - a.count);
+  const target = sorted[sortedIndex];
+  if (!target) return;
+  correctionMemory.pairs = correctionMemory.pairs.filter(p => !(p.from === target.from && p.to === target.to));
+  _saveMemory();
+  openMemoryModal(); // refresh
+  showToast('🗑 已刪除');
+}
+
+function exportMemory() {
+  if (!correctionMemory.pairs.length) { showToast('⚠️ 尚無記憶可匯出'); return; }
+  const data = JSON.stringify(correctionMemory, null, 2);
+  const stamp = new Date().toISOString().slice(0,10);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `subtitle-memory-${stamp}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('💾 記憶已匯出');
+}
+
+function importMemory(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      const incoming = data.pairs || [];
+      let merged = 0, added = 0;
+      incoming.forEach(p => {
+        const ex = correctionMemory.pairs.find(x => x.from === p.from && x.to === p.to);
+        if (ex) { ex.count += p.count; merged++; }
+        else { correctionMemory.pairs.push({...p}); added++; }
+      });
+      _saveMemory();
+      openMemoryModal();
+      showToast(`✅ 匯入完成：新增 ${added} 條，合併 ${merged} 條`, 3000);
+    } catch(e) { showToast('⚠️ 無法讀取此檔案'); }
+    input.value = '';
+  };
+  r.readAsText(file);
+}
+
+function clearMemory() {
+  if (!correctionMemory.pairs.length) { showToast('記憶已是空的'); return; }
+  if (!confirm(`確定要清除全部 ${correctionMemory.pairs.length} 條校正記憶？`)) return;
+  correctionMemory = { pairs: [] };
+  _saveMemory();
+  openMemoryModal();
+  showToast('🗑 校對記憶已清除');
+}
+
 // ── Modal Helpers ──────────────────────────────────────────────────────
 function showModal(id) {
   document.getElementById(id).style.display = 'flex';
@@ -1574,6 +1740,7 @@ async function runAI() {
 
   const glossaryText = loadGlossary();
   const glossarySection = glossaryText ? `\n【專案詞庫（絕對不可更動這些詞）】\n${glossaryText}\n\n` : '';
+  const memorySection = getCorrectionPromptSection();
 
   const systemPrompt = `你是一位專業的繁體中文字幕校對助手，專門處理台灣華語（國語）的訪談與節目字幕。${guidanceText ? '我會給你一份訪綱以及一份 SRT 格式字幕（部分批次）。' : '我會給你一份 SRT 格式字幕（部分批次）。'}
 
@@ -1591,7 +1758,7 @@ async function runAI() {
 - 「制」/「製」混用（製造 vs 制度）
 - 「里」/「裡」混用（台灣繁體標準為「裡」）
 - 人名姓氏常見誤辨：陳→成、林→鄰、蔡→菜、謝→洩、黃→荒、賴→來
-${glossarySection}你的任務：找出字幕中確實需要修正的錯誤，包括：
+${glossarySection}${memorySection}你的任務：找出字幕中確實需要修正的錯誤，包括：
 - 人名、地名、機構名、書名等專有名詞的錯字（優先對照訪綱）
 - 上列 ASR 同音字錯誤
 - 明顯的錯別字
@@ -2722,6 +2889,7 @@ function commitEdit(num, val) {
 
   if (trimmed && trimmed !== s[2]) {
     edits[num] = trimmed;
+    recordCorrection(s[2], trimmed); // 記錄校正習慣
     span.textContent = trimmed;
     span.style.color = '#2ecc71';
     const tr = document.getElementById('tr' + num);
