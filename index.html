@@ -299,18 +299,33 @@ td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6
 <!-- Settings Modal -->
 <div class="modal-overlay" id="settingsModal">
   <div class="modal">
-    <div class="modal-title">⚙️ 設定 Claude API</div>
-    <div class="modal-label">API Key</div>
+    <div class="modal-title">⚙️ 設定</div>
+
+    <div class="modal-label">Claude API Key</div>
     <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-...">
     <div class="modal-note">
       還沒有 API Key？前往 <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 免費申請。<br>
       Key 僅儲存在您的瀏覽器本機，不會上傳到任何地方。<br>
-      請勿將此 HTML 檔分享給他人（含您的 Key）。<br><br>
       每次分析約消耗 10,000–20,000 tokens，費用約 <strong style="color:#ddd">US$0.05</strong>。
     </div>
+
+    <div style="border-top:1px solid #222;margin:14px 0 10px"></div>
+    <div class="modal-label">☁️ GitHub Gist 跨裝置同步（選填）</div>
+    <input type="password" id="gistTokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx（需有 gist 權限）">
+    <div style="margin-top:6px">
+      <input type="text" id="gistIdInput" placeholder="Gist ID（第一次同步後自動填入）"
+        style="width:100%;background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:6px 10px;color:#888;font-size:.78rem;font-family:'JetBrains Mono',monospace;outline:none">
+    </div>
+    <div class="modal-note" style="margin-top:6px">
+      1. 前往 <a href="https://github.com/settings/tokens/new?scopes=gist&description=字幕編輯器" target="_blank">GitHub → Settings → Tokens</a>，建立只勾 <strong style="color:#ddd">gist</strong> 的 Token。<br>
+      2. 貼入上方欄位並儲存。<br>
+      3. 點「🧠 記憶」→「☁️ 同步 Gist」即可跨裝置共享校對記憶。
+    </div>
+    <div id="gistSyncStatus" style="font-size:.68rem;color:#555;margin-top:4px;min-height:16px"></div>
+
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('settingsModal')">取消</button>
-      <button class="btn-primary" onclick="saveApiKey()">儲存</button>
+      <button class="btn-primary" onclick="saveSettings()">儲存</button>
     </div>
   </div>
 </div>
@@ -439,13 +454,15 @@ td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6
       </tr></thead>
       <tbody id="memoryTbody"></tbody></table>
     </div>
+    <div id="gistMemStatus" style="font-size:.68rem;color:#555;min-height:16px;margin-bottom:4px"></div>
     <div class="modal-btns" style="justify-content:space-between;align-items:center">
-      <div style="display:flex;gap:6px">
-        <button class="btn-primary" onclick="exportMemory()" title="匯出為 .json 檔，換電腦可重新匯入">💾 匯出</button>
-        <label class="mem-import-label" title="匯入之前匯出的 .json 檔，與現有記憶合併">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn-primary" id="gistSyncBtn" onclick="syncMemoryGist()" title="與 GitHub Gist 同步（需先在 ⚙️ 設定 Token）">☁️ 同步 Gist</button>
+        <button class="btn-primary" onclick="exportMemory()" title="匯出為 .json 檔">💾 匯出</button>
+        <label class="mem-import-label" title="匯入 .json 檔，與現有記憶合併">
           📂 匯入<input type="file" accept=".json" style="display:none" onchange="importMemory(this)">
         </label>
-        <button class="btn-cancel" style="color:#e74c3c" onclick="clearMemory()">🗑 清除全部</button>
+        <button class="btn-cancel" style="color:#e74c3c" onclick="clearMemory()">🗑 清除</button>
       </div>
       <button class="btn-cancel" onclick="closeModal('memoryModal')">關閉</button>
     </div>
@@ -1153,17 +1170,34 @@ function applyEditsToDOM() {
 // ── Settings / API Key ─────────────────────────────────────────────────
 function openSettingsModal() {
   document.getElementById('apiKeyInput').value = localStorage.getItem('claude_api_key') || '';
+  document.getElementById('gistTokenInput').value = localStorage.getItem('github_gist_token') || '';
+  document.getElementById('gistIdInput').value = localStorage.getItem('github_gist_id') || '';
+  const syncAt = localStorage.getItem('github_gist_sync_at');
+  document.getElementById('gistSyncStatus').textContent = syncAt
+    ? '上次同步：' + new Date(syncAt).toLocaleString('zh-TW')
+    : '';
   showModal('settingsModal');
 }
 
-function saveApiKey() {
+function saveSettings() {
   const key = document.getElementById('apiKeyInput').value.trim();
   if (key) localStorage.setItem('claude_api_key', key);
   else localStorage.removeItem('claude_api_key');
+
+  const gistToken = document.getElementById('gistTokenInput').value.trim();
+  if (gistToken) localStorage.setItem('github_gist_token', gistToken);
+  else localStorage.removeItem('github_gist_token');
+
+  const gistId = document.getElementById('gistIdInput').value.trim();
+  if (gistId) localStorage.setItem('github_gist_id', gistId);
+  else localStorage.removeItem('github_gist_id');
+
   closeModal('settingsModal');
   updateAIButton();
-  showToast(key ? '✅ API Key 已儲存' : '🗑 API Key 已清除');
+  showToast('✅ 設定已儲存');
 }
+// keep old name as alias
+const saveApiKey = saveSettings;
 
 function updateAIButton() {
   const key = localStorage.getItem('claude_api_key') || '';
@@ -1562,6 +1596,13 @@ function openMemoryModal() {
       <td><button class="mem-del" onclick="deleteMemoryPair(${i})" title="刪除此條">✕</button></td>`;
     tbody.appendChild(tr);
   });
+  // Restore last sync timestamp
+  const syncAt = localStorage.getItem('gist_sync_at');
+  const statusEl = document.getElementById('gistMemStatus');
+  if (statusEl) {
+    statusEl.style.color = '#555';
+    statusEl.textContent = syncAt ? `上次同步：${syncAt}` : '';
+  }
   showModal('memoryModal');
 }
 
@@ -1619,6 +1660,129 @@ function clearMemory() {
   openMemoryModal();
   showToast('🗑 校對記憶已清除');
 }
+
+// ── GitHub Gist Sync ───────────────────────────────────────────────────
+async function syncMemoryGist() {
+  const token = localStorage.getItem('github_gist_token') || '';
+  if (!token) {
+    showToast('⚠️ 請先在 ⚙️ 設定中填入 GitHub Token');
+    return;
+  }
+  const btn = document.getElementById('gistSyncBtn');
+  const statusEl = document.getElementById('gistMemStatus');
+  const setStatus = (msg, color) => {
+    if (statusEl) { statusEl.textContent = msg; statusEl.style.color = color || '#555'; }
+  };
+  btn.disabled = true;
+  btn.textContent = '⏳ 同步中…';
+  setStatus('正在連線到 GitHub…');
+  dlog('info', 'GIST', '開始 Gist 同步');
+
+  const FILENAME = 'subtitle-editor-memory.json';
+  const headers = {
+    'Authorization': `Bearer ${token}`,
+    'Accept': 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+    'X-GitHub-Api-Version': '2022-11-28'
+  };
+
+  try {
+    let gistId = localStorage.getItem('github_gist_id') || '';
+    let remoteData = null;
+
+    // ── Step 1: Fetch remote if gistId exists ────────────────────────
+    if (gistId) {
+      setStatus('讀取遠端 Gist…');
+      const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
+      if (res.status === 404) {
+        // Gist was deleted; treat as no gist
+        gistId = '';
+        localStorage.removeItem('github_gist_id');
+        dlog('warn', 'GIST', 'Gist 404，將建立新的');
+      } else if (!res.ok) {
+        throw new Error(`GET Gist 失敗：${res.status} ${res.statusText}`);
+      } else {
+        const json = await res.json();
+        const fileContent = json.files?.[FILENAME]?.content;
+        if (fileContent) {
+          try { remoteData = JSON.parse(fileContent); } catch(e) { remoteData = null; }
+        }
+        dlog('info', 'GIST', `讀取遠端成功，遠端 pairs=${remoteData?.pairs?.length ?? 0}`);
+      }
+    }
+
+    // ── Step 2: Merge local + remote ─────────────────────────────────
+    const localPairs = correctionMemory.pairs;
+    let mergedPairs = [...localPairs];
+    if (remoteData?.pairs?.length) {
+      let added = 0, merged = 0;
+      for (const rp of remoteData.pairs) {
+        const ex = mergedPairs.find(x => x.from === rp.from && x.to === rp.to);
+        if (ex) {
+          // Take the higher count (or sum — user chooses; here we take max)
+          if (rp.count > ex.count) { ex.count = rp.count; ex.updatedAt = rp.updatedAt; }
+          merged++;
+        } else {
+          mergedPairs.push({ ...rp });
+          added++;
+        }
+      }
+      dlog('ok', 'GIST', `合併完成：新增 ${added}，更新 ${merged}`);
+    }
+
+    // ── Step 3: Push merged data back ────────────────────────────────
+    const payload = {
+      description: '字幕編輯器校對記憶（自動同步）',
+      public: false,
+      files: {
+        [FILENAME]: { content: JSON.stringify({ pairs: mergedPairs }, null, 2) }
+      }
+    };
+
+    let newGistId = gistId;
+    if (!gistId) {
+      setStatus('建立新 Gist…');
+      const res = await fetch('https://api.github.com/gists', {
+        method: 'POST', headers, body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`建立 Gist 失敗：${res.status} ${res.statusText}`);
+      const json = await res.json();
+      newGistId = json.id;
+      localStorage.setItem('github_gist_id', newGistId);
+      // Also update the settings modal input if open
+      const gistIdInput = document.getElementById('gistIdInput');
+      if (gistIdInput) gistIdInput.value = newGistId;
+      dlog('ok', 'GIST', `新 Gist 已建立 id=${newGistId}`);
+    } else {
+      setStatus('寫入遠端 Gist…');
+      const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+        method: 'PATCH', headers, body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error(`更新 Gist 失敗：${res.status} ${res.statusText}`);
+      dlog('ok', 'GIST', `Gist 已更新 id=${gistId}`);
+    }
+
+    // ── Step 4: Apply merged data locally ────────────────────────────
+    correctionMemory.pairs = mergedPairs;
+    _saveMemory();
+    const now = new Date().toLocaleString('zh-TW', { hour12: false });
+    localStorage.setItem('gist_sync_at', now);
+    setStatus(`✅ 上次同步：${now}`, '#3a7a3a');
+    showToast(`☁️ Gist 同步完成，共 ${mergedPairs.length} 條記憶`);
+    dlog('ok', 'GIST', `同步完成，共 ${mergedPairs.length} 條，gistId=${newGistId}`);
+    // Refresh modal content
+    openMemoryModal();
+
+  } catch(err) {
+    setStatus(`❌ ${err.message}`, '#c0392b');
+    showToast('❌ Gist 同步失敗：' + err.message, 5000);
+    dlog('error', 'GIST', '同步失敗', err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '☁️ 同步 Gist';
+  }
+}
+// ── End GitHub Gist Sync ───────────────────────────────────────────────
 
 // ── Modal Helpers ──────────────────────────────────────────────────────
 function showModal(id) {
