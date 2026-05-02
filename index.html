@@ -224,6 +224,28 @@ td.num{position:relative}
 .cmd-history-item{color:#666;border-color:#222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .cmd-history-item:hover{border-color:#8b7cf8;color:#a99cf8}
 
+/* ── Timecode Editor Popup ── */
+#tcEditPopup{position:fixed;z-index:3000;background:#14141f;border:1px solid #3dd6c8;border-radius:10px;padding:12px 14px;box-shadow:0 6px 32px rgba(0,0,0,.7);display:none;min-width:340px}
+.tc-popup-title{font-size:.68rem;color:#3dd6c8;font-weight:700;letter-spacing:.4px;text-transform:uppercase;margin-bottom:9px}
+.tc-edit-row{display:flex;align-items:center;gap:4px;margin-bottom:5px}
+.tc-edit-label{font-size:.62rem;color:#555;width:30px;text-align:right;flex-shrink:0}
+.tc-input{font-family:'JetBrains Mono',monospace;font-size:.7rem;background:#0a1010;border:1px solid #2a4a4a;border-radius:4px;color:#3dd6c8;padding:3px 7px;width:116px;outline:none;transition:border-color .15s}
+.tc-input:focus{border-color:#3dd6c8;box-shadow:0 0 0 2px rgba(61,214,200,.12)}
+.tc-adj-btn{font-size:.6rem;padding:2px 6px;background:#0a1a1a;border:1px solid #1e3a3a;border-radius:3px;color:#3dd6c8;cursor:pointer;line-height:1.5;white-space:nowrap;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.tc-adj-btn:hover{background:#1a3030;border-color:#3dd6c8}
+.tc-video-btn{font-size:.6rem;padding:2px 7px;background:#0a1a0a;border:1px solid #1e3a1e;border-radius:3px;color:#2ecc71;cursor:pointer;line-height:1.5;white-space:nowrap;font-family:inherit;flex-shrink:0}
+.tc-video-btn:hover{background:#1a3a1a;border-color:#2ecc71}
+.tc-popup-footer{display:flex;gap:6px;margin-top:10px;align-items:center}
+.tc-confirm-btn{font-size:.7rem;padding:3px 12px;background:#0a2a1a;border:1px solid #2ecc71;border-radius:5px;color:#2ecc71;cursor:pointer;font-family:inherit}
+.tc-confirm-btn:hover{background:#1a4a2a}
+.tc-cancel-btn{font-size:.7rem;padding:3px 10px;background:#1a1a1a;border:1px solid #333;border-radius:5px;color:#666;cursor:pointer;font-family:inherit}
+.tc-cancel-btn:hover{border-color:#aaa;color:#aaa}
+.tc-reset-btn{font-size:.7rem;padding:3px 10px;background:#1a1a1a;border:1px solid #333;border-radius:5px;color:#666;cursor:pointer;font-family:inherit;margin-left:auto}
+.tc-reset-btn:hover{border-color:#f5a623;color:#f5a623}
+td.tc.tc-active{background:rgba(61,214,200,.07) !important}
+td.tc.edited-tc{color:#2ecc71}
+td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6}
+
 /* AI overlay */
 .ai-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:2000;gap:16px}
 .ai-spinner{width:44px;height:44px;border:3px solid #2a2a2a;border-top-color:#8b7cf8;border-radius:50%;animation:spin .8s linear infinite}
@@ -566,6 +588,38 @@ td.num{position:relative}
 
 <div class="toast" id="toast"></div>
 
+<!-- Timecode Edit Popup -->
+<div id="tcEditPopup">
+  <div class="tc-popup-title">⏱ 調整時間碼</div>
+  <div class="tc-edit-row">
+    <span class="tc-edit-label">開始</span>
+    <input class="tc-input" id="tcsInput" placeholder="00:00:00,000">
+    <button class="tc-adj-btn" onclick="adjTc('start',-100)">−.1s</button>
+    <button class="tc-adj-btn" onclick="adjTc('start',+100)">+.1s</button>
+    <button class="tc-adj-btn" onclick="adjTc('start',-500)">−.5s</button>
+    <button class="tc-adj-btn" onclick="adjTc('start',+500)">+.5s</button>
+    <button class="tc-adj-btn" onclick="adjTc('start',-1000)">−1s</button>
+    <button class="tc-adj-btn" onclick="adjTc('start',+1000)">+1s</button>
+    <button class="tc-video-btn" onclick="setTcFromVideo('start')" title="套用目前影片播放時間">▶ 影片</button>
+  </div>
+  <div class="tc-edit-row">
+    <span class="tc-edit-label">結束</span>
+    <input class="tc-input" id="tceInput" placeholder="00:00:00,000">
+    <button class="tc-adj-btn" onclick="adjTc('end',-100)">−.1s</button>
+    <button class="tc-adj-btn" onclick="adjTc('end',+100)">+.1s</button>
+    <button class="tc-adj-btn" onclick="adjTc('end',-500)">−.5s</button>
+    <button class="tc-adj-btn" onclick="adjTc('end',+500)">+.5s</button>
+    <button class="tc-adj-btn" onclick="adjTc('end',-1000)">−1s</button>
+    <button class="tc-adj-btn" onclick="adjTc('end',+1000)">+1s</button>
+    <button class="tc-video-btn" onclick="setTcFromVideo('end')" title="套用目前影片播放時間">▶ 影片</button>
+  </div>
+  <div class="tc-popup-footer">
+    <button class="tc-confirm-btn" onclick="commitTcEdit()">✓ 確認</button>
+    <button class="tc-cancel-btn" onclick="closeTcEdit()">✗ 取消</button>
+    <button class="tc-reset-btn" onclick="resetTcToOriginal()" title="還原為原始時間碼">↺ 還原原始</button>
+  </div>
+</div>
+
 <div id="debugPanel">
   <div class="dlog-header">
     <span>🔧 Debug 日誌 <span id="dlogCount">0</span> 筆（最多 500，跨重整保留）</span>
@@ -695,6 +749,8 @@ let currentFilename = '';
 let guidanceText = '';
 let currentVersionId = null; // 目前載入的版本 ID（null = 未從版本載入）
 const BATCH_SIZE = 300; // 每批送給 Claude 的最大字幕條數
+let tcEdits = {};     // 時間碼覆寫：num → 'HH:MM:SS,mmm --> HH:MM:SS,mmm'
+let _tcEditNum = null; // 目前正在編輯的行號
 
 // ── Init ───────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
@@ -922,6 +978,7 @@ function pushHistory(label) {
     label: label || '操作',
     SUBS: SUBS.map(s => [...s]),
     edits: {...edits},
+    tcEdits: {...tcEdits},
   });
   if (undoStack.length > UNDO_LIMIT) undoStack.shift();
   updateUndoBtn();
@@ -932,6 +989,7 @@ function undoHistory() {
   const snap = undoStack.pop();
   SUBS = snap.SUBS;
   edits = snap.edits;
+  tcEdits = snap.tcEdits || {};
   rebuildTable();
   applyEditsToDOM();
   saveSession();
@@ -958,6 +1016,7 @@ function showTableUI() {
 function rebuildTable() {
   document.getElementById('tbody').innerHTML = '';
   buildTable();
+  applyTcEditsToDOM();
   doFilter();
 }
 
@@ -965,7 +1024,7 @@ function rebuildTable() {
 function saveSession() {
   try {
     localStorage.setItem('subtitle_session', JSON.stringify({
-      subs: SUBS, edits, filename: currentFilename, savedAt: new Date().toISOString()
+      subs: SUBS, edits, tcEdits, filename: currentFilename, savedAt: new Date().toISOString()
     }));
     const t = new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
     document.getElementById('saveInfo').textContent = '已儲存 ' + t;
@@ -983,6 +1042,7 @@ function loadSession() {
     if (!data.subs || !data.subs.length) return;
     SUBS = data.subs;
     edits = data.edits || {};
+    tcEdits = data.tcEdits || {};
     currentFilename = data.filename || '';
     const savedAt = data.savedAt ? new Date(data.savedAt).toLocaleString('zh-TW') : '之前';
     document.getElementById('fileInfo').textContent = currentFilename + ' ｜ ' + SUBS.length + ' 條';
@@ -2025,7 +2085,7 @@ function seekVideoToRow(num) {
 function exportSRT() {
   if (!SUBS.length) { showToast('⚠️ 尚未載入字幕'); return; }
   const content = SUBS.map(([num, tc, txt]) => {
-    return num + '\n' + tc + '\n' + (edits[num] || txt);
+    return num + '\n' + (tcEdits[num] || tc) + '\n' + (edits[num] || txt);
   }).join('\n\n');
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -2037,7 +2097,9 @@ function exportSRT() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   const editCount = Object.keys(edits).length;
-  showToast('💾 已匯出（含 ' + editCount + ' 處修改）');
+  const tcCount = Object.keys(tcEdits).length;
+  const note = [editCount && `${editCount} 處文字修改`, tcCount && `${tcCount} 處時間碼調整`].filter(Boolean).join('、');
+  showToast('💾 已匯出' + (note ? `（含 ${note}）` : ''));
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────
@@ -2400,6 +2462,128 @@ function jumpToAdjacentSubtitle(direction) {
 }
 
 // ── Core Table Functions (preserved from original) ─────────────────────
+// ── Timecode Edit ──────────────────────────────────────────────────────
+function tcToMs(str) {
+  const m = str.trim().match(/(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})/);
+  if (!m) return 0;
+  return +m[1]*3600000 + +m[2]*60000 + +m[3]*1000 + +m[4];
+}
+function msToTc(ms) {
+  ms = Math.max(0, Math.round(ms));
+  const h = Math.floor(ms/3600000); ms %= 3600000;
+  const m = Math.floor(ms/60000);   ms %= 60000;
+  const s = Math.floor(ms/1000);    ms %= 1000;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')},${String(ms).padStart(3,'0')}`;
+}
+function _splitTc(fullTc) {
+  const p = fullTc.split('-->').map(x => x.trim());
+  return { start: p[0] || '00:00:00,000', end: p[1] || '00:00:00,000' };
+}
+function startTcEdit(num) {
+  closeTcEdit();
+  const td = document.querySelector(`#tr${num} td.tc`);
+  if (!td) return;
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  _tcEditNum = num;
+  const { start, end } = _splitTc(tcEdits[num] || s[1]);
+  document.getElementById('tcsInput').value = start;
+  document.getElementById('tceInput').value = end;
+  // show/hide video-time button depending on whether video is loaded
+  const hasVideo = !!document.getElementById('videoEl').src;
+  document.querySelectorAll('.tc-video-btn').forEach(b => b.style.display = hasVideo ? '' : 'none');
+  // position popup near td
+  const popup = document.getElementById('tcEditPopup');
+  popup.style.display = 'block';
+  const rect = td.getBoundingClientRect();
+  const popW = popup.offsetWidth || 360;
+  let left = rect.left;
+  if (left + popW > window.innerWidth - 8) left = Math.max(8, window.innerWidth - popW - 8);
+  let top = rect.bottom + 4;
+  if (top + 160 > window.innerHeight) top = rect.top - 164;
+  popup.style.left = left + 'px';
+  popup.style.top  = top  + 'px';
+  td.classList.add('tc-active');
+  setTimeout(() => document.getElementById('tcsInput').select(), 30);
+}
+function adjTc(field, deltaMs) {
+  const el = document.getElementById(field === 'start' ? 'tcsInput' : 'tceInput');
+  if (el) el.value = msToTc(tcToMs(el.value) + deltaMs);
+}
+function setTcFromVideo(field) {
+  const vid = document.getElementById('videoEl');
+  if (!vid || !vid.src) return;
+  const el = document.getElementById(field === 'start' ? 'tcsInput' : 'tceInput');
+  if (el) el.value = msToTc(Math.round(vid.currentTime * 1000));
+}
+function commitTcEdit() {
+  if (_tcEditNum === null) return;
+  const num = _tcEditNum;
+  const startVal = document.getElementById('tcsInput').value.trim();
+  const endVal   = document.getElementById('tceInput').value.trim();
+  const newTc = startVal + ' --> ' + endVal;
+  if (!/^\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}$/.test(newTc)) {
+    showToast('⚠️ 格式錯誤，請確認為 HH:MM:SS,mmm'); return;
+  }
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  if (newTc === s[1]) {
+    pushHistory('時間碼 #' + num + ' 還原');
+    delete tcEdits[num];
+  } else {
+    pushHistory('時間碼 #' + num);
+    tcEdits[num] = newTc;
+  }
+  _applyTcDisplay(num);
+  closeTcEdit();
+  saveSession();
+  dlog('ok', 'TC', `#${num} 時間碼已調整`, newTc);
+}
+function resetTcToOriginal() {
+  if (_tcEditNum === null) return;
+  const num = _tcEditNum;
+  if (!tcEdits[num]) { closeTcEdit(); return; }
+  pushHistory('時間碼 #' + num + ' 還原');
+  delete tcEdits[num];
+  _applyTcDisplay(num);
+  closeTcEdit();
+  saveSession();
+  dlog('ok', 'TC', `#${num} 時間碼已還原原始值`);
+}
+function closeTcEdit() {
+  const popup = document.getElementById('tcEditPopup');
+  if (popup) popup.style.display = 'none';
+  if (_tcEditNum !== null) {
+    document.querySelector(`#tr${_tcEditNum} td.tc`)?.classList.remove('tc-active');
+    _tcEditNum = null;
+  }
+}
+function _applyTcDisplay(num) {
+  const td = document.querySelector(`#tr${num} td.tc`);
+  if (!td) return;
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  const tc = tcEdits[num] || s[1];
+  const textNode = [...td.childNodes].find(n => n.nodeType === 3);
+  if (textNode) textNode.textContent = tc.split(' --> ')[0];
+  td.classList.toggle('edited-tc', !!tcEdits[num]);
+  td.title = tcEdits[num]
+    ? `目前：${tcEdits[num]}\n原始：${s[1]}\n雙擊再次編輯`
+    : '單擊跳轉影片 | 雙擊調整時間碼';
+}
+function applyTcEditsToDOM() {
+  Object.keys(tcEdits).forEach(n => _applyTcDisplay(parseInt(n)));
+}
+// close popup on outside click
+document.addEventListener('click', e => {
+  const popup = document.getElementById('tcEditPopup');
+  if (popup && popup.style.display !== 'none'
+      && !popup.contains(e.target)
+      && !e.target.closest('td.tc')) {
+    closeTcEdit();
+  }
+}, true);
+
 function buildTable() {
   const tb = document.getElementById('tbody');
   const frag = document.createDocumentFragment();
@@ -2424,9 +2608,15 @@ function buildTable() {
     tdN.appendChild(insertBtn);
 
     const tdT = document.createElement('td');
-    tdT.className = 'tc'; tdT.textContent = tc.split(' --> ')[0];
-    tdT.title = '點擊跳轉影片'; tdT.style.cursor = 'pointer';
+    const displayTc = tcEdits[num] || tc;
+    tdT.className = 'tc' + (tcEdits[num] ? ' edited-tc' : '');
+    tdT.textContent = displayTc.split(' --> ')[0];
+    tdT.title = tcEdits[num]
+      ? `目前：${tcEdits[num]}\n原始：${tc}\n雙擊再次編輯`
+      : '單擊跳轉影片 | 雙擊調整時間碼';
+    tdT.style.cursor = 'pointer';
     tdT.onclick = () => seekVideoToRow(num);
+    tdT.ondblclick = e => { e.stopPropagation(); startTcEdit(num); };
     const delBtn = document.createElement('button');
     delBtn.className = 'delete-row-btn';
     delBtn.textContent = '刪除';
