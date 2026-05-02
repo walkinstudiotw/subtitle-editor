@@ -59,7 +59,7 @@ colgroup col:nth-child(4){width:50%}
 /* video panel */
 .video-resize-handle{width:5px;background:transparent;cursor:col-resize;flex-shrink:0;transition:background .15s;position:relative;z-index:10}
 .video-resize-handle:hover,.video-resize-handle.dragging{background:#8b7cf8}
-.video-panel{width:360px;min-width:220px;max-width:700px;background:#0d0d0d;border-left:1px solid #2a2a2a;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.video-panel{width:360px;min-width:220px;max-width:1200px;background:#0d0d0d;border-left:1px solid #2a2a2a;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
 .video-panel-header{padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #1a1a1a;flex-shrink:0}
 .video-panel-title{font-size:.72rem;color:#555;font-weight:600;letter-spacing:.4px;text-transform:uppercase;flex:1}
 .video-close-btn{background:none;border:none;color:#444;cursor:pointer;font-size:.9rem;padding:2px 5px;border-radius:4px;line-height:1}
@@ -2680,7 +2680,8 @@ function setupVideoPanelResize() {
 
     const onMove = e => {
       const delta = startX - e.clientX; // drag left = wider
-      const newW = Math.min(700, Math.max(220, startW + delta));
+      const maxW = Math.floor(window.innerWidth * 0.85);
+      const newW = Math.min(maxW, Math.max(220, startW + delta));
       panel.style.width = newW + 'px';
     };
     const onUp = () => {
