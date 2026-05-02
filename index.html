@@ -454,6 +454,7 @@ td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6
     <button class="action-btn" id="searchEnhBtn" onclick="toggleSearchEnhanced()" title="⚠️ 注意：啟用後每次 AI 分析費用會增加，分析時間也會拉長 10–20 秒。建議僅在訪綱含有較多需要查證的專有名詞時開啟。">🔍 搜尋增強</button>
     <button class="action-btn" id="cmdBtn" disabled title="請先匯入字幕並設定 API Key" onclick="openCommandModal()">📝 指令</button>
     <button class="action-btn" id="undoBtn" disabled onclick="undoHistory()" title="沒有可復原的操作">↩ 復原</button>
+    <button class="action-btn" id="redoBtn" disabled onclick="redoHistory()" title="沒有可重做的操作">↪ 重做</button>
     <button class="action-btn" id="videoBtn" onclick="toggleVideoPanel()">🎬 影片</button>
     <button class="action-btn settings-btn" onclick="openSettingsModal()" title="設定 API Key">⚙️</button>
     <button class="action-btn settings-btn" id="debugBtn" onclick="toggleDebugPanel()" title="Debug 日誌">🔧</button>
@@ -638,6 +639,8 @@ td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6
   <span class="kbd-hint"><kbd class="kbd">⇧←</kbd><kbd class="kbd">⇧→</kbd> 跳退／跳進 30 秒</span>
   <span class="kbd-hint"><kbd class="kbd">Tab</kbd> 下一條字幕</span>
   <span class="kbd-hint"><kbd class="kbd">⇧Tab</kbd> 上一條字幕</span>
+  <span class="kbd-hint"><kbd class="kbd">⌘Z</kbd> 復原</span>
+  <span class="kbd-hint"><kbd class="kbd">⌘⇧Z</kbd> 重做</span>
   <span class="kbd-hint"><kbd class="kbd">⌘S</kbd> 儲存版本</span>
   <span class="kbd-hint"><kbd class="kbd">Esc</kbd> 取消編輯</span>
   <span class="kbd-hint" style="margin-left:auto;color:#2a2a2a"><kbd class="kbd">?</kbd> 顯示／隱藏</span>
@@ -742,6 +745,7 @@ function downloadDebugLog() {
 let SUBS = [];
 let edits = {};
 let undoStack = [];
+let redoStack = [];
 const UNDO_LIMIT = 30;
 let curF = 'all', curQ = '';
 let searchEnhanced = false;
@@ -972,39 +976,63 @@ function loadSubtitleFile(file) {
 }
 
 // ── UI State ───────────────────────────────────────────────────────────
-// ── Undo ───────────────────────────────────────────────────────────────
-function pushHistory(label) {
-  undoStack.push({
-    label: label || '操作',
-    SUBS: SUBS.map(s => [...s]),
-    edits: {...edits},
-    tcEdits: {...tcEdits},
-  });
-  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
-  updateUndoBtn();
+// ── Undo / Redo ────────────────────────────────────────────────────────
+function _currentSnapshot(label) {
+  return { label: label || '操作', SUBS: SUBS.map(s => [...s]), edits: {...edits}, tcEdits: {...tcEdits} };
 }
 
-function undoHistory() {
-  if (!undoStack.length) { showToast('沒有可復原的操作'); return; }
-  const snap = undoStack.pop();
+function pushHistory(label) {
+  undoStack.push(_currentSnapshot(label));
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack = []; // 任何新操作清空 redo
+  updateUndoRedoBtn();
+}
+
+function _restoreSnapshot(snap) {
   SUBS = snap.SUBS;
   edits = snap.edits;
   tcEdits = snap.tcEdits || {};
   rebuildTable();
   applyEditsToDOM();
   saveSession();
-  updateUndoBtn();
+}
+
+function undoHistory() {
+  if (!undoStack.length) { showToast('沒有可復原的操作'); return; }
+  redoStack.push(_currentSnapshot(undoStack[undoStack.length - 1].label));
+  const snap = undoStack.pop();
+  _restoreSnapshot(snap);
+  updateUndoRedoBtn();
   showToast('↩ 已復原：' + snap.label);
 }
 
-function updateUndoBtn() {
-  const btn = document.getElementById('undoBtn');
-  if (!btn) return;
-  btn.disabled = undoStack.length === 0;
-  btn.title = undoStack.length
-    ? '復原：' + undoStack[undoStack.length - 1].label + '（⌘Z）'
-    : '沒有可復原的操作';
+function redoHistory() {
+  if (!redoStack.length) { showToast('沒有可重做的操作'); return; }
+  undoStack.push(_currentSnapshot(redoStack[redoStack.length - 1].label));
+  const snap = redoStack.pop();
+  _restoreSnapshot(snap);
+  updateUndoRedoBtn();
+  showToast('↪ 已重做：' + snap.label);
 }
+
+function updateUndoRedoBtn() {
+  const uBtn = document.getElementById('undoBtn');
+  const rBtn = document.getElementById('redoBtn');
+  if (uBtn) {
+    uBtn.disabled = undoStack.length === 0;
+    uBtn.title = undoStack.length
+      ? '復原：' + undoStack[undoStack.length - 1].label + '（⌘Z）'
+      : '沒有可復原的操作';
+  }
+  if (rBtn) {
+    rBtn.disabled = redoStack.length === 0;
+    rBtn.title = redoStack.length
+      ? '重做：' + redoStack[redoStack.length - 1].label + '（⌘⇧Z）'
+      : '沒有可重做的操作';
+  }
+}
+// keep old name as alias for any remaining callers
+const updateUndoBtn = updateUndoRedoBtn;
 
 function showTableUI() {
   document.getElementById('dropZone').style.display = 'none';
@@ -2358,6 +2386,12 @@ function setupKeyboardShortcuts() {
     if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
       e.preventDefault();
       undoHistory();
+      return;
+    }
+    // ── Cmd+Shift+Z → Redo ────────────────────────────────────────
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) {
+      e.preventDefault();
+      redoHistory();
       return;
     }
 
