@@ -290,6 +290,17 @@ td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6
 .dlog-msg{color:#e0e0e0;flex:1}
 .dlog-detail{color:#888;font-size:.68rem}
 #debugBtn{font-size:.8rem}
+/* ── Split button ── */
+.split-row-btn{position:absolute;right:44px;top:50%;transform:translateY(-50%);background:#0a0a1a;border:1px solid #444;border-radius:4px;color:#555;font-size:.65rem;padding:1px 6px;cursor:pointer;opacity:0;transition:all .15s;white-space:nowrap;line-height:1.5}
+.split-row-btn:hover{border-color:#8b7cf8;color:#8b7cf8;background:#12122a}
+tr:hover .split-row-btn{opacity:1}
+/* ── Split modal ── */
+.split-halves{display:flex;gap:10px;margin-top:4px}
+.split-half{flex:1;display:flex;flex-direction:column;gap:4px}
+.split-half label{font-size:.68rem;color:#888;letter-spacing:.3px}
+.split-half textarea{background:#222;border:1px solid #333;border-radius:6px;padding:6px 8px;color:#ddd;font-size:.82rem;font-family:inherit;resize:vertical;outline:none;line-height:1.5;min-height:64px}
+.split-half textarea:focus{border-color:#8b7cf8}
+.split-tc-preview{font-size:.68rem;color:#555;margin-top:2px}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
@@ -489,6 +500,30 @@ td.tc.edited-tc::after{content:'✎';font-size:.55rem;margin-left:3px;opacity:.6
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('insertModal')">取消</button>
       <button class="btn-primary" onclick="confirmInsertSubtitle()">➕ 新增</button>
+    </div>
+  </div>
+</div>
+
+<!-- Split Modal -->
+<div class="modal-overlay" id="splitModal">
+  <div class="modal" style="width:520px">
+    <div class="modal-title">✂️ 分割字幕 #<span id="splitNum"></span></div>
+    <div class="modal-note">把文字分配到兩個框框，確認後會拆成兩條字幕，時間碼依字數比例自動分配。</div>
+    <div class="split-halves">
+      <div class="split-half">
+        <label>第一段</label>
+        <textarea id="splitText1" oninput="updateSplitPreview()"></textarea>
+        <div class="split-tc-preview" id="splitTc1"></div>
+      </div>
+      <div class="split-half">
+        <label>第二段</label>
+        <textarea id="splitText2" oninput="updateSplitPreview()"></textarea>
+        <div class="split-tc-preview" id="splitTc2"></div>
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('splitModal')">取消</button>
+      <button class="btn-primary" onclick="confirmSplit()">✂️ 確認分割</button>
     </div>
   </div>
 </div>
@@ -2988,7 +3023,13 @@ function buildTable() {
     delBtn.textContent = '刪除';
     delBtn.title = '刪除此字幕條目';
     delBtn.onclick = e => { e.stopPropagation(); deleteSubtitle(num); };
+    const splitBtn = document.createElement('button');
+    splitBtn.className = 'split-row-btn';
+    splitBtn.textContent = '✂️ 分割';
+    splitBtn.title = '將這條字幕分割成兩條';
+    splitBtn.onclick = e => { e.stopPropagation(); openSplitModal(num); };
     tdT.appendChild(delBtn);
+    tdT.appendChild(splitBtn);
 
     const tdO = document.createElement('td');
     tdO.className = 'orig'; tdO.textContent = text;
@@ -3175,6 +3216,112 @@ function deleteSubtitle(num) {
   saveSession();
   showToast('🗑️ 已刪除第 #' + num + ' 條字幕');
 }
+
+// ── Split Subtitle ─────────────────────────────────────────────────────
+let _splitNum = null;
+
+function openSplitModal(num) {
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+  _splitNum = num;
+  const text = edits[num] != null ? edits[num] : s[2];
+
+  // Find natural split point: nearest space to midpoint
+  const mid = Math.floor(text.length / 2);
+  let splitPos = mid;
+  // Search outward from mid for a space
+  for (let d = 0; d <= mid; d++) {
+    if (text[mid + d] === ' ') { splitPos = mid + d; break; }
+    if (text[mid - d] === ' ') { splitPos = mid - d; break; }
+  }
+
+  document.getElementById('splitNum').textContent = num;
+  document.getElementById('splitText1').value = text.slice(0, splitPos).trim();
+  document.getElementById('splitText2').value = text.slice(splitPos).trim();
+  updateSplitPreview();
+  showModal('splitModal');
+  setTimeout(() => document.getElementById('splitText1').focus(), 100);
+}
+
+function updateSplitPreview() {
+  if (_splitNum === null) return;
+  const s = SUBS.find(x => x[0] === _splitNum);
+  if (!s) return;
+  const tc = tcEdits[_splitNum] || s[1];
+  const { start, end } = _splitTc(tc);
+  const startMs = tcToMs(start);
+  const endMs   = tcToMs(end);
+  const t1 = document.getElementById('splitText1').value.trim();
+  const t2 = document.getElementById('splitText2').value.trim();
+  const total = t1.length + t2.length || 1;
+  const midMs = Math.round(startMs + (endMs - startMs) * (t1.length / total));
+  document.getElementById('splitTc1').textContent =
+    msToTc(startMs) + ' → ' + msToTc(midMs);
+  document.getElementById('splitTc2').textContent =
+    msToTc(midMs) + ' → ' + msToTc(endMs);
+}
+
+function confirmSplit() {
+  const t1 = document.getElementById('splitText1').value.trim();
+  const t2 = document.getElementById('splitText2').value.trim();
+  if (!t1 || !t2) { showToast('⚠️ 兩段都不能空白'); return; }
+  const num = _splitNum;
+  const s = SUBS.find(x => x[0] === num);
+  if (!s) return;
+
+  const tc = tcEdits[num] || s[1];
+  const { start, end } = _splitTc(tc);
+  const startMs = tcToMs(start);
+  const endMs   = tcToMs(end);
+  const total = t1.length + t2.length || 1;
+  const midMs = Math.round(startMs + (endMs - startMs) * (t1.length / total));
+  const tc1 = msToTc(startMs) + ' --> ' + msToTc(midMs);
+  const tc2 = msToTc(midMs)   + ' --> ' + msToTc(endMs);
+
+  pushHistory('✂️ 分割 #' + num);
+
+  // ── Renumber edits & tcEdits: shift everything after num by +1 ──
+  const newEdits = {};
+  for (const [k, v] of Object.entries(edits)) {
+    const n = parseInt(k, 10);
+    newEdits[n > num ? n + 1 : n] = v;
+  }
+  // Set first part text (only if different from original)
+  newEdits[num] = t1;
+  edits = newEdits;
+
+  const newTcEdits = {};
+  for (const [k, v] of Object.entries(tcEdits)) {
+    const n = parseInt(k, 10);
+    newTcEdits[n > num ? n + 1 : n] = v;
+  }
+  // Override timecodes for both parts
+  newTcEdits[num]     = tc1;
+  newTcEdits[num + 1] = tc2;
+  tcEdits = newTcEdits;
+
+  // Shift SUBS nums
+  SUBS.forEach(s => { if (s[0] > num) s[0]++; });
+
+  // Insert second part after current
+  const idx = SUBS.findIndex(x => x[0] === num);
+  SUBS.splice(idx + 1, 0, [num + 1, s[1], t2, 0]);
+
+  closeModal('splitModal');
+  _splitNum = null;
+  rebuildTable();
+  applyEditsToDOM();
+  applyTcEditsToDOM();
+  saveSession();
+  showToast('✂️ 已分割為兩條（#' + num + ' 和 #' + (num + 1) + '）');
+  dlog('ok', 'EDIT', `分割 #${num}`, `"${t1}" | "${t2}"`);
+
+  setTimeout(() => {
+    const tr = document.getElementById('tr' + num);
+    if (tr) tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 100);
+}
+// ── End Split Subtitle ─────────────────────────────────────────────────
 
 function undoEdit(num) {
   pushHistory('撤銷編輯 #' + num);
