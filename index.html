@@ -2423,10 +2423,11 @@ function onVideoTimeUpdate() {
   const t = vid.currentTime;
   document.getElementById('videoTimeDisplay').textContent = formatSeconds(t);
 
-  // Find matching subtitle
+  // Find matching subtitle (respect tcEdits overrides)
   let matched = null;
   for (const s of SUBS) {
-    const parts = s[1].split(' --> ');
+    const effectiveTc = tcEdits[s[0]] || s[1];
+    const parts = effectiveTc.split(' --> ');
     const start = parseTcToSeconds(parts[0]);
     const end = parseTcToSeconds(parts[1]);
     if (t >= start && t <= end) { matched = s; break; }
@@ -2471,7 +2472,8 @@ function seekVideoToRow(num) {
   if (!vid.src) return;
   const s = SUBS.find(x => x[0] === num);
   if (!s) return;
-  vid.currentTime = parseTcToSeconds(s[1].split(' --> ')[0]);
+  const effectiveTc = tcEdits[num] || s[1];
+  vid.currentTime = parseTcToSeconds(effectiveTc.split(' --> ')[0]);
   vid.play().catch(() => {});
 }
 
