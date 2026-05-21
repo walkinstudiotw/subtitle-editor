@@ -2219,8 +2219,9 @@ function saveVersion() {
     savedAt: new Date().toISOString(),
     filename: currentFilename,
     editCount: Object.keys(edits).length,
-    edits: { ...edits },          // 只存 edits（輕量）
-    subsSnapshot: SUBS.map(([n, tc, txt, f]) => [n, tc, txt, f]), // 完整快照
+    edits: { ...edits },
+    tcEdits: { ...tcEdits },
+    subsSnapshot: SUBS.map(([n, tc, txt, f]) => [n, tc, txt, f]),
   };
   versions.unshift(version); // 最新在最上面
   localStorage.setItem('subtitle_versions', JSON.stringify(versions));
@@ -2311,12 +2312,13 @@ function loadVersion(id) {
   // 載入版本資料
   SUBS = v.subsSnapshot.map(s => [...s]);
   edits = { ...v.edits };
+  tcEdits = { ...(v.tcEdits || {}) };
   currentFilename = v.filename;
   currentVersionId = id;
 
   // 更新 UI
   document.getElementById('fileInfo').textContent = v.name + ' ｜ ' + SUBS.length + ' 條';
-  rebuildTable();
+  rebuildTable();       // rebuildTable already calls applyTcEditsToDOM()
   applyEditsToDOM();
   showTableUI();
   updateAIButton();
@@ -2776,6 +2778,7 @@ function setupKeyboardShortcuts() {
         id: 'v_' + Date.now(), name, savedAt: now.toISOString(),
         filename: currentFilename, editCount: Object.keys(edits).length,
         edits: { ...edits },
+        tcEdits: { ...tcEdits },
         subsSnapshot: SUBS.map(s => [...s]),
       };
       versions.unshift(version);
@@ -3292,22 +3295,22 @@ function confirmSplit() {
   newEdits[num] = t1;
   edits = newEdits;
 
+  // Shift tcEdits keys (don't carry over tc for the split row itself)
   const newTcEdits = {};
   for (const [k, v] of Object.entries(tcEdits)) {
     const n = parseInt(k, 10);
+    if (n === num) continue;  // discard old manual-edit for this row; tc1 goes into SUBS
     newTcEdits[n > num ? n + 1 : n] = v;
   }
-  // Override timecodes for both parts
-  newTcEdits[num]     = tc1;
-  newTcEdits[num + 1] = tc2;
   tcEdits = newTcEdits;
 
   // Shift SUBS nums
   SUBS.forEach(s => { if (s[0] > num) s[0]++; });
 
-  // Insert second part after current
+  // Write split timecodes directly into SUBS (not tcEdits) so they survive version snapshots
   const idx = SUBS.findIndex(x => x[0] === num);
-  SUBS.splice(idx + 1, 0, [num + 1, s[1], t2, 0]);
+  SUBS[idx][1] = tc1;                                      // update first part tc in-place
+  SUBS.splice(idx + 1, 0, [num + 1, tc2, t2, 0]);         // insert second part with tc2
 
   closeModal('splitModal');
   _splitNum = null;
